@@ -10,6 +10,8 @@ import campRoutes from './routes/camps.js';
 import roomRoutes from './routes/rooms.js';
 import checklistItemRoutes from './routes/checklistItems.js';
 import inspectionRoutes from './routes/inspections.js';
+import correctiveActionRoutes from './routes/correctiveActions.js';
+import priorityFlagRoutes from './routes/priorityFlags.js';
 
 function health(_req, res) {
   res.json({ ok: true });
@@ -21,6 +23,8 @@ function mountApiRoutes(app, prefix) {
   app.use(`${prefix}/rooms`, roomRoutes);
   app.use(`${prefix}/checklist-items`, checklistItemRoutes);
   app.use(`${prefix}/inspections`, inspectionRoutes);
+  app.use(`${prefix}/corrective-actions`, correctiveActionRoutes);
+  app.use(`${prefix}/priority-flags`, priorityFlagRoutes);
 }
 
 export function createApp() {

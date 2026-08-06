@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { validateBody, validateParams, idParam } from '../middleware/validate.js';
+import { validateBody, validateQuery, validateParams, idParam } from '../middleware/validate.js';
 import { uploadInspectionPhoto, assertSniffedPhoto, deleteUploadFile, UPLOAD_ROOT } from '../middleware/upload.js';
 import { badRequest, notFound, forbidden, conflict } from '../utils/errors.js';
 import { seedDefaultResponses, serializeInspection, inspectionInclude } from '../services/inspections.js';
@@ -57,6 +57,60 @@ router.post(
     });
 
     res.status(201).json({ inspection: serializeInspection(created) });
+  })
+);
+
+const latestByRoomQuery = z.object({ campId: z.coerce.number().int().positive() });
+
+router.get(
+  '/latest-by-room',
+  validateQuery(latestByRoomQuery),
+  asyncHandler(async (req, res) => {
+    const { campId } = req.query;
+    if (req.user.role === 'CAMP_SUPERVISOR' && req.user.campId !== campId) {
+      throw forbidden('You can only view your assigned camp');
+    }
+
+    const rooms = await prisma.room.findMany({
+      where: { campId },
+      include: {
+        inspections: {
+          where: { status: 'SUBMITTED' },
+          orderBy: { inspectedAt: 'desc' },
+          take: 1,
+          include: {
+            inspector: true,
+            responses: { include: { selectedOptions: { include: { option: true } } } },
+          },
+        },
+      },
+    });
+
+    const roomInspections = rooms
+      .filter((room) => room.inspections.length > 0)
+      .map((room) => {
+        const inspection = room.inspections[0];
+        return {
+          roomId: room.id,
+          roomNumber: room.roomNumber,
+          approvedCapacity: room.approvedCapacity,
+          inspectedAt: inspection.inspectedAt,
+          inspectorName: inspection.inspector.name,
+          headcount: inspection.headcount,
+          responses: inspection.responses.map((resp) => {
+            const selectedOptionIds = resp.selectedOptions
+              .filter((so) => so.option.kind === 'TOGGLE')
+              .map((so) => so.optionId);
+            const optionCounts = {};
+            for (const so of resp.selectedOptions) {
+              if (so.option.kind === 'COUNT') optionCounts[so.optionId] = so.count ?? 0;
+            }
+            return { checklistItemId: resp.checklistItemId, selectedOptionIds, optionCounts };
+          }),
+        };
+      });
+
+    res.json({ roomInspections });
   })
 );
 

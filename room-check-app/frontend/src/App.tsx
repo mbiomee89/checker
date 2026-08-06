@@ -6,6 +6,7 @@ import HomeRedirect from './pages/HomeRedirect';
 import RoomsPage from './pages/inspector/RoomsPage';
 import InspectionPage from './pages/inspector/InspectionPage';
 import DashboardPage from './pages/manager/DashboardPage';
+import ManagerRoomsPage from './pages/manager/RoomsPage';
 import AdminPage from './pages/admin/AdminPage';
 import HseDashboardPage from './pages/hse/HseDashboardPage';
 
@@ -21,6 +22,7 @@ export default function App() {
               <Route path="/rooms" element={<RoomsPage />} />
               <Route path="/inspections/:id" element={<InspectionPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/dashboard/rooms" element={<ManagerRoomsPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/hse" element={<HseDashboardPage />} />
               <Route path="*" element={<HomeRedirect />} />
