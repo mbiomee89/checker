@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-06
 **Product:** Checker (IKK Group room housekeeping inspections)
-**Handoff purpose:** `room-check-app` now has Inspector, Camp Supervisor Dashboard, and Admin Configuration all working end-to-end against real data. Continue with HSE Overview next, then push to GitHub when ready.
+**Handoff purpose:** `room-check-app` now has Inspector, Camp Supervisor Dashboard, and Admin Configuration all working end-to-end against real data, and is pushed to GitHub. Continue with HSE Overview next.
 
 ---
 
@@ -10,13 +10,13 @@
 
 | Path | What |
 |------|------|
-| `D:\room check\` | Workspace root — git repo (local only, no remote yet) |
+| `D:\room check\` | Workspace root — git repo, pushed to GitHub |
 | `D:\room check\schema.prisma` | Rev 10 Prisma schema (canonical — kept in sync with `room-check-app/prisma/schema.prisma`) |
 | `D:\room check\my-project-design\` | Design OS clone (product planning + screen designs) — source of ported UI components |
 | `D:\room check\room-check-app\` | **The real app.** Express 5 + Prisma 6.19 + SQLite backend, React 19 + Vite + Tailwind v4 frontend. |
-| `https://github.com/mbiomee89/checker.git` | Target app repo — **not yet connected**; local git only per earlier session's decision |
+| `https://github.com/mbiomee89/checker.git` | App repo — **connected**, `main` is the default branch |
 
-**Git status:** 2 local commits so far (scaffold, Camp Supervisor Dashboard). This session's Admin Configuration work is **not yet committed** — see "Not done" below, do that next.
+**Git status:** 3 commits pushed to `origin/main` (scaffold, Camp Supervisor Dashboard, Admin Configuration). Working tree clean.
 
 ---
 
@@ -69,13 +69,11 @@ Confirmed with the user before building (both diverge from a straight design por
 
 ## Not done / next steps
 
-1. **Commit this session's work** — Admin Configuration + multi-role auth changes are verified but not yet `git commit`'d. Do this first.
-2. **HSE Overview** — still an empty-state frame. Needs cross-camp aggregation (Combined-scope charts, camp comparison panel, frequency-over-time drill-down). `HSEOverview.tsx` is 591 lines and reuses the same chart/filter patterns as the Camp Supervisor Dashboard — the `latest-by-room`/corrective-actions/priority-flags backend logic should mostly generalize to "all camps" rather than needing a rebuild.
-3. **Dedicated printable report component** — inspector's and supervisor's "Report" buttons still just open the read-only `InspectionForm` view instead of the designed letterhead/sign-off report (`InspectionReport.tsx`/`SupervisorInspectionReport.tsx`, not yet ported).
-4. **Inspector's "Supervisor Activity Review" screen** — where priority flags get toggled by inspectors (`POST`/`DELETE /priority-flags` don't exist yet, only `GET`). Not built.
-5. **`requiresAction` matrix** — schema/UI now support it per-option (Admin Configuration's option editor has the toggle), but no real values have been filled in — still needs stakeholder input on which findings should auto-open a `CorrectiveAction`.
-6. **GitHub** — push to `https://github.com/mbiomee89/checker.git` explicitly deferred; do it as a separate, explicitly-confirmed step.
-7. **Production config** — still SQLite/dev only; Postgres + Render deploy (`render.yaml` pattern from `D:\school project`) not started.
+1. **HSE Overview** — still an empty-state frame. Needs cross-camp aggregation (Combined-scope charts, camp comparison panel, frequency-over-time drill-down). `HSEOverview.tsx` is 591 lines and reuses the same chart/filter patterns as the Camp Supervisor Dashboard — the `latest-by-room`/corrective-actions/priority-flags backend logic should mostly generalize to "all camps" rather than needing a rebuild.
+2. **Dedicated printable report component** — inspector's and supervisor's "Report" buttons still just open the read-only `InspectionForm` view instead of the designed letterhead/sign-off report (`InspectionReport.tsx`/`SupervisorInspectionReport.tsx`, not yet ported).
+3. **Inspector's "Supervisor Activity Review" screen** — where priority flags get toggled by inspectors (`POST`/`DELETE /priority-flags` don't exist yet, only `GET`). Not built.
+4. **`requiresAction` matrix** — schema/UI now support it per-option (Admin Configuration's option editor has the toggle), but no real values have been filled in — still needs stakeholder input on which findings should auto-open a `CorrectiveAction`.
+5. **Production config** — still SQLite/dev only; Postgres + Render deploy (`render.yaml` pattern from `D:\school project`) not started.
 
 ---
 
