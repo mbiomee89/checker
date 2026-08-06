@@ -2,6 +2,8 @@ import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, ROLE_LABELS } from '../lib/auth';
 import { AppShell } from '../shell/components';
 import { navForRole, roleMayAccessPath, ROLE_HOME } from '../shared/accessControl';
+import ForceChangePassword from '../components/ForceChangePassword';
+import type { Role } from '../api/auth';
 
 export function RequireAuth() {
   const { isAuthenticated, bootstrapping } = useAuth();
@@ -23,28 +25,38 @@ export function RequireAuth() {
 }
 
 export function AppLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, switchRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   if (!user) return null;
 
-  if (!roleMayAccessPath(user.role, location.pathname)) {
-    return <Navigate to={ROLE_HOME[user.role]} replace />;
+  if (user.mustChangePassword) {
+    return <ForceChangePassword />;
   }
 
-  const navigationItems = navForRole(user.role).map((item) => ({
+  if (!roleMayAccessPath(user.activeRole, location.pathname)) {
+    return <Navigate to={ROLE_HOME[user.activeRole]} replace />;
+  }
+
+  const navigationItems = navForRole(user.activeRole).map((item) => ({
     ...item,
     isActive: location.pathname.startsWith(item.href),
   }));
 
+  async function handleSwitchRole(role: string) {
+    await switchRole(role as Role);
+    navigate(ROLE_HOME[role as Role]);
+  }
+
   return (
     <AppShell
       navigationItems={navigationItems}
-      user={{ name: user.name, roles: [user.role], activeRole: user.role }}
+      user={{ name: user.name, roles: user.roles, activeRole: user.activeRole }}
       roleLabels={ROLE_LABELS}
       onNavigate={(href) => navigate(href)}
       onLogout={logout}
+      onSwitchRole={handleSwitchRole}
     >
       <Outlet />
     </AppShell>

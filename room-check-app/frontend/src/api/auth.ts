@@ -6,8 +6,10 @@ export interface AuthUser {
   id: number;
   name: string;
   email: string;
-  role: Role;
   campId: number | null;
+  roles: Role[];
+  activeRole: Role;
+  mustChangePassword: boolean;
 }
 
 export function login(email: string, password: string) {
@@ -20,4 +22,18 @@ export function login(email: string, password: string) {
 
 export function me() {
   return apiRequest<{ user: AuthUser }>('/auth/me');
+}
+
+export function switchRole(role: Role) {
+  return apiRequest<{ token: string; user: AuthUser }>('/auth/switch-role', {
+    method: 'POST',
+    body: { role },
+  });
+}
+
+export function changePassword(currentPassword: string, newPassword: string) {
+  return apiRequest<void>('/auth/change-password', {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+  });
 }

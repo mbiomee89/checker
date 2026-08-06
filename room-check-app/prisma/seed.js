@@ -237,43 +237,38 @@ async function main() {
     }
   }
 
-  // Users — idempotent via email unique; never overwrite an existing password
+  // Users — idempotent via email unique; never overwrite an existing password.
+  // Seeded demo accounts get real credentials immediately (hasCredentials/no forced
+  // change) — that flow is only for admin-created users via generate-credentials.
   const passwordHash = await bcrypt.hash('Password123!', SALT_ROUNDS);
   const arabianGulf = campsByName['Arabian Gulf'];
 
-  const existingAdmin = await prisma.user.findUnique({ where: { email: 'admin@checker.local' } });
-  if (!existingAdmin) {
-    await prisma.user.create({
-      data: { name: 'Admin User', email: 'admin@checker.local', passwordHash, role: 'ADMIN' },
-    });
-  }
-
-  const existingInspector = await prisma.user.findUnique({ where: { email: 'inspector@checker.local' } });
-  if (!existingInspector) {
-    await prisma.user.create({
-      data: { name: 'Mahmoud Atiya', email: 'inspector@checker.local', passwordHash, role: 'INSPECTOR' },
-    });
-  }
-
-  const existingSupervisor = await prisma.user.findUnique({ where: { email: 'supervisor@checker.local' } });
-  if (!existingSupervisor) {
-    await prisma.user.create({
+  async function seedUser({ name, email, roles, campId }) {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return existing;
+    return prisma.user.create({
       data: {
-        name: 'Omar Al-Harbi',
-        email: 'supervisor@checker.local',
+        name,
+        email,
         passwordHash,
-        role: 'CAMP_SUPERVISOR',
-        campId: arabianGulf.id,
+        campId: campId ?? null,
+        hasCredentials: true,
+        roleAssignments: { create: roles.map((role) => ({ role })) },
       },
     });
   }
 
-  const existingHse = await prisma.user.findUnique({ where: { email: 'hse@checker.local' } });
-  if (!existingHse) {
-    await prisma.user.create({
-      data: { name: 'Layla Nasser', email: 'hse@checker.local', passwordHash, role: 'HSE_VIEWER' },
-    });
-  }
+  await seedUser({ name: 'Admin User', email: 'admin@checker.local', roles: ['ADMIN'] });
+  await seedUser({ name: 'Mahmoud Atiya', email: 'inspector@checker.local', roles: ['INSPECTOR'] });
+  await seedUser({
+    name: 'Omar Al-Harbi',
+    email: 'supervisor@checker.local',
+    roles: ['CAMP_SUPERVISOR'],
+    campId: arabianGulf.id,
+  });
+  await seedUser({ name: 'Layla Nasser', email: 'hse@checker.local', roles: ['HSE_VIEWER'] });
+  // Multi-role demo account, proves the role switcher (UserMenu "Switch role") works end to end.
+  await seedUser({ name: 'Fatima Noor', email: 'fatima@checker.local', roles: ['ADMIN', 'HSE_VIEWER'] });
 
   console.log('Seed complete.');
   console.log('Login with any of (password: Password123!):');
@@ -281,6 +276,7 @@ async function main() {
   console.log('  inspector@checker.local (INSPECTOR)');
   console.log('  supervisor@checker.local (CAMP_SUPERVISOR)');
   console.log('  hse@checker.local (HSE_VIEWER)');
+  console.log('  fatima@checker.local (ADMIN + HSE_VIEWER, role switcher demo)');
 }
 
 main()

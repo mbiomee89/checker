@@ -16,7 +16,7 @@ router.get(
   '/',
   validateQuery(listQuery),
   asyncHandler(async (req, res) => {
-    if (req.user.role === 'CAMP_SUPERVISOR' && req.user.campId !== req.query.campId) {
+    if (req.user.activeRole === 'CAMP_SUPERVISOR' && req.user.campId !== req.query.campId) {
       throw forbidden('You can only view your assigned camp');
     }
     const flags = await prisma.priorityFlag.findMany({ where: { campId: req.query.campId } });

@@ -1,7 +1,22 @@
-// Room Check App — Prisma schema (Rev 9 — added ChecklistItemOptionKind + InspectionResponseOption.count for Furniture-style inventory items)
+// Room Check App — Prisma schema (Rev 10 — multi-role users via UserRoleAssignment, User.mustChangePassword/hasCredentials for admin-issued temp passwords, Camp.active/Room.active for soft-delete)
 // Stack: Prisma ORM, SQLite in dev, PostgreSQL in production (mirrors D:\school project)
 //
 // Documented invariants (enforced in the service layer, not the DB):
+// - A user may hold more than one role (UserRoleAssignment, at least one row required —
+//   enforced by the admin-user-creation service, not the DB). The JWT carries a single
+//   activeRole claim — the role the user is currently acting as, switchable via
+//   POST /auth/switch-role to any role in their own roleAssignments. requireAuth
+//   re-validates activeRole against the user's current roleAssignments on every request
+//   (a revoked role on a live token is rejected, not silently downgraded).
+// - User.hasCredentials starts false: passwordHash is set to a hash of an unguessable
+//   random value at creation, so login simply fails (generic invalid-credentials error,
+//   no special-casing) until an admin calls POST /admin/users/:id/generate-credentials,
+//   which sets a real temp password, hasCredentials=true, and mustChangePassword=true.
+//   mustChangePassword blocks all navigation until POST /auth/change-password clears it.
+// - Camp.active / Room.active: retired camps/rooms are hidden from inspector- and
+//   supervisor-facing endpoints (GET /camps, GET /rooms) but remain visible (with a
+//   "Retired" badge) in the admin views — same soft-delete convention as
+//   ChecklistItem/ChecklistItemOption.active, never a hard delete.
 // - Inspection.campId is NEVER accepted from the client. It is always copied from
 //   room.campId inside the same transaction that creates the Inspection.
 // - Default clear option: every condition ChecklistItem has exactly one option with
@@ -94,6 +109,7 @@ model Camp {
   id            Int            @id @default(autoincrement())
   name          String
   location      String?
+  active        Boolean        @default(true) // retired camps are hidden from inspector/supervisor views, never hard-deleted
   rooms         Room[]
   users         User[]
   inspections   Inspection[]
@@ -107,6 +123,7 @@ model Room {
   campId            Int
   roomNumber        String
   approvedCapacity  Int?
+  active            Boolean            @default(true) // retired rooms are hidden from inspector/supervisor views, never hard-deleted
   inspections       Inspection[]
   correctiveActions CorrectiveAction[]
   createdAt         DateTime           @default(now())
@@ -116,19 +133,30 @@ model Room {
 }
 
 model User {
-  id            Int            @id @default(autoincrement())
-  name          String
-  email         String         @unique
-  passwordHash  String
-  role          Role
-  camp          Camp?          @relation(fields: [campId], references: [id])
-  campId        Int? // null = spans all camps (ADMIN / HSE_VIEWER / INSPECTOR — inspector picks the camp per inspection, not fixed on their profile); required in practice only for CAMP_SUPERVISOR. A camp may have multiple active CAMP_SUPERVISOR users — no per-camp uniqueness constraint.
-  isActive      Boolean        @default(true)
-  inspections   Inspection[]   @relation("InspectorInspections")
-  priorityFlags PriorityFlag[] // set by this user when role=INSPECTOR — see schema header invariants
-  createdAt     DateTime       @default(now())
+  id                 Int                  @id @default(autoincrement())
+  name               String
+  email              String               @unique
+  passwordHash       String
+  roleAssignments    UserRoleAssignment[] // a user may hold more than one role; the JWT's activeRole picks which one they're currently acting as
+  camp               Camp?                @relation(fields: [campId], references: [id])
+  campId             Int? // null = spans all camps (ADMIN / HSE_VIEWER / INSPECTOR — inspector picks the camp per inspection, not fixed on their profile); required in practice only for CAMP_SUPERVISOR. A camp may have multiple active CAMP_SUPERVISOR users — no per-camp uniqueness constraint. One camp regardless of how many roles the user holds.
+  isActive           Boolean              @default(true)
+  mustChangePassword Boolean              @default(false) // true after an admin issues a temp password; cleared by POST /auth/change-password
+  hasCredentials     Boolean              @default(false) // false until an admin generates the user's first login credentials — passwordHash is an unguessable placeholder until then
+  inspections        Inspection[]         @relation("InspectorInspections")
+  priorityFlags      PriorityFlag[] // set by this user when role=INSPECTOR — see schema header invariants
+  createdAt          DateTime             @default(now())
 
   @@index([campId])
+}
+
+model UserRoleAssignment {
+  id     Int  @id @default(autoincrement())
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+  role   Role
+
+  @@unique([userId, role])
 }
 
 model ChecklistItem {

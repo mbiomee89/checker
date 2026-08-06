@@ -13,7 +13,7 @@ export default function LoginPage() {
 
   if (isAuthenticated && user) {
     const from = (location.state as { from?: string })?.from;
-    return <Navigate to={from ?? ROLE_HOME[user.role]} replace />;
+    return <Navigate to={from ?? ROLE_HOME[user.activeRole]} replace />;
   }
 
   async function handleLogin({ email, password }: { email: string; password: string }) {

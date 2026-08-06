@@ -14,12 +14,12 @@ const router = Router();
 router.use(requireAuth);
 
 function assertCanView(user, inspection) {
-  if (user.role === 'ADMIN') return;
+  if (user.activeRole === 'ADMIN') return;
   if (inspection.status === 'DRAFT') {
-    if (user.role !== 'INSPECTOR') throw forbidden();
+    if (user.activeRole !== 'INSPECTOR') throw forbidden();
     return;
   }
-  if (user.role === 'CAMP_SUPERVISOR' && user.campId !== inspection.campId) throw forbidden();
+  if (user.activeRole === 'CAMP_SUPERVISOR' && user.campId !== inspection.campId) throw forbidden();
 }
 
 async function loadInspection(id) {
@@ -67,7 +67,7 @@ router.get(
   validateQuery(latestByRoomQuery),
   asyncHandler(async (req, res) => {
     const { campId } = req.query;
-    if (req.user.role === 'CAMP_SUPERVISOR' && req.user.campId !== campId) {
+    if (req.user.activeRole === 'CAMP_SUPERVISOR' && req.user.campId !== campId) {
       throw forbidden('You can only view your assigned camp');
     }
 

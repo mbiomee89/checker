@@ -14,7 +14,7 @@ router.use(requireAuth);
 const listQuery = z.object({ campId: z.coerce.number().int().positive() });
 
 function assertCampAccess(user, campId) {
-  if (user.role === 'CAMP_SUPERVISOR' && user.campId !== campId) throw forbidden('You can only view your assigned camp');
+  if (user.activeRole === 'CAMP_SUPERVISOR' && user.campId !== campId) throw forbidden('You can only view your assigned camp');
 }
 
 router.get(

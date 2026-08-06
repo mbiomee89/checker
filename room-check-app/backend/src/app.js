@@ -12,6 +12,10 @@ import checklistItemRoutes from './routes/checklistItems.js';
 import inspectionRoutes from './routes/inspections.js';
 import correctiveActionRoutes from './routes/correctiveActions.js';
 import priorityFlagRoutes from './routes/priorityFlags.js';
+import adminCampRoutes from './routes/adminCamps.js';
+import adminRoomRoutes from './routes/adminRooms.js';
+import adminUserRoutes from './routes/adminUsers.js';
+import adminChecklistRoutes from './routes/adminChecklist.js';
 
 function health(_req, res) {
   res.json({ ok: true });
@@ -25,6 +29,10 @@ function mountApiRoutes(app, prefix) {
   app.use(`${prefix}/inspections`, inspectionRoutes);
   app.use(`${prefix}/corrective-actions`, correctiveActionRoutes);
   app.use(`${prefix}/priority-flags`, priorityFlagRoutes);
+  app.use(`${prefix}/admin/camps`, adminCampRoutes);
+  app.use(`${prefix}/admin/rooms`, adminRoomRoutes);
+  app.use(`${prefix}/admin/users`, adminUserRoutes);
+  app.use(`${prefix}/admin/checklist-items`, adminChecklistRoutes);
 }
 
 export function createApp() {

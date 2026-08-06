@@ -53,7 +53,7 @@ export default function RoomsPage() {
   return (
     <RoomTable
       camps={camps}
-      currentUser={{ id: user.id, name: user.name, role: user.role }}
+      currentUser={{ id: user.id, name: user.name, role: user.activeRole }}
       roomRows={roomRows}
       onStartInspection={handleStartInspection}
       onResumeDraft={(id) => navigate(`/inspections/${id}`)}

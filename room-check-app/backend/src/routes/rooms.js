@@ -17,12 +17,12 @@ router.get(
   validateQuery(listQuery),
   asyncHandler(async (req, res) => {
     const { campId } = req.query;
-    if (req.user.role === 'CAMP_SUPERVISOR' && req.user.campId !== campId) {
+    if (req.user.activeRole === 'CAMP_SUPERVISOR' && req.user.campId !== campId) {
       throw forbidden('You can only view rooms in your assigned camp');
     }
 
     const rooms = await prisma.room.findMany({
-      where: { campId },
+      where: { campId, active: true },
       orderBy: { roomNumber: 'asc' },
       include: {
         inspections: {

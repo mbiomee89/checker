@@ -1,17 +1,148 @@
-import { Settings2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { AdminConfiguration } from '../../sections/admin-configuration/components/AdminConfiguration';
+import type {
+  AdminTab,
+  Camp,
+  Room,
+  AdminUser,
+  ChecklistItem,
+} from '../../sections/admin-configuration/types';
+import { listAdminCamps, createCamp, updateCamp, setCampActive } from '../../api/adminCamps';
+import { listAdminRooms, createRoom, updateRoom, setRoomActive, createRoomRange } from '../../api/adminRooms';
+import { listAdminUsers, createUser, updateUser, setUserActive, generateCredentials } from '../../api/adminUsers';
+import {
+  listAdminChecklistItems,
+  createChecklistItem,
+  updateChecklistItem,
+  setChecklistItemActive,
+  createOption,
+  updateOption,
+  setOptionActive,
+} from '../../api/adminChecklist';
 
 export default function AdminPage() {
+  const [camps, setCamps] = useState<Camp[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [activeTab, setActiveTab] = useState<AdminTab>('camps');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    const [c, r, u, ci] = await Promise.all([
+      listAdminCamps(),
+      listAdminRooms(),
+      listAdminUsers(),
+      listAdminChecklistItems(),
+    ]);
+    setCamps(c.camps);
+    setRooms(r.rooms);
+    setUsers(u.users);
+    setChecklistItems(ci.checklistItems);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        await reload();
+      } catch {
+        if (!cancelled) setError('Could not load admin data.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [reload]);
+
+  if (loading) {
+    return <div className="flex min-h-full items-center justify-center p-10 text-slate-500">Loading…</div>;
+  }
+  if (error) {
+    return <div className="p-10 text-red-600">{error}</div>;
+  }
+
   return (
-    <div className="mx-auto max-w-3xl p-6 md:p-8">
-      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-700 dark:bg-slate-950">
-        <Settings2 className="mx-auto size-8 text-blue-600 dark:text-blue-400" />
-        <h1 className="mt-3 font-[family-name:var(--font-heading,Manrope)] text-lg font-semibold text-slate-900 dark:text-white">
-          Admin Configuration
-        </h1>
-        <p className="mx-auto mt-2 max-w-md text-sm text-slate-500 dark:text-slate-400">
-          Camp, room, user, and checklist management will live here.
-        </p>
-      </div>
-    </div>
+    <AdminConfiguration
+      camps={camps}
+      rooms={rooms}
+      users={users}
+      checklistItems={checklistItems}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      onAddCamp={async (camp) => {
+        await createCamp(camp);
+        await reload();
+      }}
+      onEditCamp={async (campId, camp) => {
+        await updateCamp(campId, camp);
+        await reload();
+      }}
+      onRetireCamp={async (campId, active) => {
+        await setCampActive(campId, active);
+        await reload();
+      }}
+      onAddRoom={async (room) => {
+        await createRoom(room);
+        await reload();
+      }}
+      onEditRoom={async (roomId, room) => {
+        await updateRoom(roomId, room);
+        await reload();
+      }}
+      onRetireRoom={async (roomId, active) => {
+        await setRoomActive(roomId, active);
+        await reload();
+      }}
+      onAddRoomRange={async (range) => {
+        await createRoomRange(range);
+        await reload();
+      }}
+      onAddUser={async (user) => {
+        await createUser(user);
+        await reload();
+      }}
+      onEditUser={async (userId, user) => {
+        await updateUser(userId, user);
+        await reload();
+      }}
+      onSetUserActive={async (userId, active) => {
+        await setUserActive(userId, active);
+        await reload();
+      }}
+      onGenerateCredentials={async (userId) => {
+        const { tempPassword } = await generateCredentials(userId);
+        await reload();
+        return tempPassword;
+      }}
+      onAddChecklistItem={async (item) => {
+        await createChecklistItem(item);
+        await reload();
+      }}
+      onEditChecklistItem={async (itemId, item) => {
+        await updateChecklistItem(itemId, item);
+        await reload();
+      }}
+      onRetireChecklistItem={async (itemId, active) => {
+        await setChecklistItemActive(itemId, active);
+        await reload();
+      }}
+      onAddOption={async (itemId, option) => {
+        await createOption(itemId, option);
+        await reload();
+      }}
+      onEditOption={async (itemId, optionId, option) => {
+        await updateOption(itemId, optionId, option);
+        await reload();
+      }}
+      onRetireOption={async (itemId, optionId, active) => {
+        await setOptionActive(itemId, optionId, active);
+        await reload();
+      }}
+    />
   );
 }

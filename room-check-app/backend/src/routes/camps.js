@@ -10,8 +10,11 @@ router.use(requireAuth);
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    // CAMP_SUPERVISOR only sees their own camp; everyone else sees all camps.
-    const where = req.user.role === 'CAMP_SUPERVISOR' && req.user.campId ? { id: req.user.campId } : {};
+    // CAMP_SUPERVISOR only sees their own camp; everyone else sees all active camps.
+    const where =
+      req.user.activeRole === 'CAMP_SUPERVISOR' && req.user.campId
+        ? { id: req.user.campId, active: true }
+        : { active: true };
     const camps = await prisma.camp.findMany({ where, orderBy: { name: 'asc' } });
     res.json({ camps });
   })
