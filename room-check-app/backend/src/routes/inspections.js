@@ -6,7 +6,7 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validateBody, validateQuery, validateParams, idParam } from '../middleware/validate.js';
 import { uploadInspectionPhoto, assertSniffedPhoto, deleteUploadFile, UPLOAD_ROOT } from '../middleware/upload.js';
 import { badRequest, notFound, forbidden, conflict } from '../utils/errors.js';
-import { seedDefaultResponses, serializeInspection, inspectionInclude } from '../services/inspections.js';
+import { seedDefaultResponses, serializeInspection, inspectionInclude, mapResponses } from '../services/inspections.js';
 import path from 'node:path';
 
 const router = Router();
@@ -97,16 +97,7 @@ router.get(
           inspectedAt: inspection.inspectedAt,
           inspectorName: inspection.inspector.name,
           headcount: inspection.headcount,
-          responses: inspection.responses.map((resp) => {
-            const selectedOptionIds = resp.selectedOptions
-              .filter((so) => so.option.kind === 'TOGGLE')
-              .map((so) => so.optionId);
-            const optionCounts = {};
-            for (const so of resp.selectedOptions) {
-              if (so.option.kind === 'COUNT') optionCounts[so.optionId] = so.count ?? 0;
-            }
-            return { checklistItemId: resp.checklistItemId, selectedOptionIds, optionCounts };
-          }),
+          responses: mapResponses(inspection.responses),
         };
       });
 

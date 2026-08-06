@@ -16,6 +16,7 @@ import adminCampRoutes from './routes/adminCamps.js';
 import adminRoomRoutes from './routes/adminRooms.js';
 import adminUserRoutes from './routes/adminUsers.js';
 import adminChecklistRoutes from './routes/adminChecklist.js';
+import hseRoutes from './routes/hse.js';
 
 function health(_req, res) {
   res.json({ ok: true });
@@ -33,6 +34,7 @@ function mountApiRoutes(app, prefix) {
   app.use(`${prefix}/admin/rooms`, adminRoomRoutes);
   app.use(`${prefix}/admin/users`, adminUserRoutes);
   app.use(`${prefix}/admin/checklist-items`, adminChecklistRoutes);
+  app.use(`${prefix}/hse`, hseRoutes);
 }
 
 export function createApp() {

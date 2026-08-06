@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-06
 **Product:** Checker (IKK Group room housekeeping inspections)
-**Handoff purpose:** `room-check-app` now has Inspector, Camp Supervisor Dashboard, and Admin Configuration all working end-to-end against real data, and is pushed to GitHub. Continue with HSE Overview next.
+**Handoff purpose:** All four roadmap sections (Inspector, Camp Supervisor Dashboard, Admin Configuration, HSE Overview) now work end-to-end against real data, pushed to GitHub. Remaining work is polish/secondary screens — see "Not done" below.
 
 ---
 
@@ -16,7 +16,7 @@
 | `D:\room check\room-check-app\` | **The real app.** Express 5 + Prisma 6.19 + SQLite backend, React 19 + Vite + Tailwind v4 frontend. |
 | `https://github.com/mbiomee89/checker.git` | App repo — **connected**, `main` is the default branch |
 
-**Git status:** 3 commits pushed to `origin/main` (scaffold, Camp Supervisor Dashboard, Admin Configuration). Working tree clean.
+**Git status:** commits pushed to `origin/main` through Admin Configuration; this session's HSE Overview work still needs a commit — see "Not done" below, do that next.
 
 ---
 
@@ -47,33 +47,36 @@ Confirmed with the user before building (both diverge from a straight design por
 - Core: `app.js`/`server.js`, `middleware/{auth,upload,validate}.js`, `routes/{auth,camps,rooms,checklistItems,inspections}.js`, `services/inspections.js`.
 - Auth (reworked this session): JWT payload is `{sub, activeRole}`. `requireAuth` re-fetches the user **and** their `roleAssignments` every request, validates the JWT's `activeRole` is still among them (a revoked role on a live token is rejected, not silently downgraded). `requireRole` checks `req.user.activeRole`. New: `POST /auth/switch-role` (re-signs a token with a different held role), `POST /auth/change-password`.
 - Camp Supervisor Dashboard: `GET /inspections/latest-by-room`, `GET/POST /corrective-actions`, `PATCH /corrective-actions/:id`, `GET /priority-flags` (read-only — toggling is the still-unbuilt inspector "Supervisor Activity Review" screen). `services/correctiveActions.js` implements the append-only log: every note/status-change is server-prefixed `[date, author]: ` and appended, never overwritten.
-- **Admin CRUD (new this session)**, all `requireRole('ADMIN')`: `routes/adminCamps.js`, `adminRooms.js` (incl. `POST /range` bulk room creation), `adminUsers.js` (incl. `POST /:id/generate-credentials`), `adminChecklist.js` (items + nested options), all mounted at `/admin/*`. `services/users.js` has the server-side temp-password generator (`crypto.randomInt`-backed, not `Math.random`).
+- **Admin CRUD**, all `requireRole('ADMIN')`: `routes/adminCamps.js`, `adminRooms.js` (incl. `POST /range` bulk room creation), `adminUsers.js` (incl. `POST /:id/generate-credentials`), `adminChecklist.js` (items + nested options), all mounted at `/admin/*`. `services/users.js` has the server-side temp-password generator (`crypto.randomInt`-backed, not `Math.random`).
+- **HSE Overview (new this session)**, `routes/hse.js`, `requireRole('ADMIN', 'HSE_VIEWER')`, mounted at `/hse/*` — the only fully read-only section (no mutation endpoints at all). `GET /room-inspections` and `GET /corrective-actions`/`GET /priority-flags` are the same shapes as the Camp Supervisor Dashboard's equivalents but **cross-camp** (every active camp, each row tagged `campId`/`campName`, no `campId` query param — the frontend does all scope filtering client-side against the full dataset, confirmed by reading the design). The one genuinely new piece: `GET /inspection-cycles?months=6` buckets every SUBMITTED inspection into `{campId, campName, cycleMonth}` groups (one entry per inspection event, not deduplicated per room) for the frequency-over-time trend chart — there's no "cycle" entity in the schema, `cycleMonth` is just the calendar month of `Inspection.inspectedAt`. `services/hse.js` has `monthRange`/`monthOf` helpers. Also extracted `mapResponses()` in `services/inspections.js` (TOGGLE→`selectedOptionIds` / COUNT→`optionCounts` splitting) since it was duplicated three times before this — now the one place that encodes it, reused by `serializeInspection`, `/inspections/latest-by-room`, and `services/hse.js`.
 
 **Frontend** (`room-check-app/frontend/src/`):
 - Shell, Inspector Checklist, and Camp Supervisor Dashboard components **ported verbatim** from `my-project-design/product-plan/` (only change across all of them: local `string` id type annotations → `number` — no behavior change).
 - **Admin Configuration (new this session)**: `AdminConfiguration.tsx` (1399 lines) ported the same way, plus one real behavior change — `UsersTab`'s `issueCredentials` is now `async` and awaits the real backend-generated password instead of the design's client-side stand-in. `pages/admin/AdminPage.tsx` wires all four tabs (camps/rooms/users/checklist) to the new `/admin/*` endpoints with reload-after-mutation.
 - **`components/ForceChangePassword.tsx` (new, hand-written, not ported)**: blocks all navigation and renders inline when `user.mustChangePassword` is true — mirrors the described `D:\school project` `StaffLayout` pattern. Rendered from `AppLayout` before the normal `Outlet`.
 - `AppLayout`/`UserMenu` role switcher is now genuinely functional (previously always a no-op single-element array) — calls `switchRole()` then navigates to the new role's home.
-- HSE Overview is still the placeholder frame — next up.
+- **HSE Overview (new this session)**: `HSEOverview.tsx` (591 lines) ported the same way (id-type fixes only, no behavior changes — it's fully read-only so there's nothing to rewire beyond data-fetching). `pages/hse/HseDashboardPage.tsx` loads all six data sources once on mount, no mutation wiring needed.
 
 **Seed data** (`room-check-app/prisma/seed.js`, idempotent): 13 checklist items, 2 camps, 11 rooms, 5 login accounts (all password `Password123!`): `admin@checker.local`, `inspector@checker.local`, `supervisor@checker.local` (CAMP_SUPERVISOR/Arabian Gulf), `hse@checker.local`, **`fatima@checker.local` (ADMIN + HSE_VIEWER — proves the role switcher works)**.
 
-**Verified end-to-end in the browser this session:**
+**Verified end-to-end in the browser:**
 - Multi-role login → role switcher in user menu → switching roles navigates correctly, `activeRole` changes, access to role-gated routes flips accordingly.
 - Admin Configuration all 4 tabs render real data (camps with room/user counts, rooms with camp filter, users with multi-role badges, checklist items with expandable options).
 - Full user lifecycle through the real UI: create a user with 2 roles → shows "No login yet" → "Set up login" → real temp password shown once in the modal → that password actually works for login → forced password-change screen blocks all navigation → completing it clears the block and lands on the role home.
-- Regression-checked: Inspector and Camp Supervisor flows from prior sessions still work after the auth refactor; retiring a camp correctly removes it from the inspector's camp picker.
+- HSE Overview: Combined scope aggregates both seeded camps correctly (2 rooms, camp comparison panel ranking both at 0 open actions), bar-click filter → drill-down table with a Camp column → frequency-over-time trend chart all rendered correctly against real cross-camp data; switching scope to one camp narrowed everything and dropped the Camp column as expected; confirmed HSE_VIEWER redirected away from `/dashboard`/`/admin`/`/rooms`.
+- Regression-checked: Inspector and Camp Supervisor flows still work after the auth refactor; retiring a camp correctly removes it from the inspector's camp picker.
 - No console errors anywhere in the above.
 
 ---
 
 ## Not done / next steps
 
-1. **HSE Overview** — still an empty-state frame. Needs cross-camp aggregation (Combined-scope charts, camp comparison panel, frequency-over-time drill-down). `HSEOverview.tsx` is 591 lines and reuses the same chart/filter patterns as the Camp Supervisor Dashboard — the `latest-by-room`/corrective-actions/priority-flags backend logic should mostly generalize to "all camps" rather than needing a rebuild.
+1. **Commit + push this session's HSE Overview work** — verified but not yet committed. Do this first.
 2. **Dedicated printable report component** — inspector's and supervisor's "Report" buttons still just open the read-only `InspectionForm` view instead of the designed letterhead/sign-off report (`InspectionReport.tsx`/`SupervisorInspectionReport.tsx`, not yet ported).
-3. **Inspector's "Supervisor Activity Review" screen** — where priority flags get toggled by inspectors (`POST`/`DELETE /priority-flags` don't exist yet, only `GET`). Not built.
+3. **Inspector's "Supervisor Activity Review" screen** — where priority flags get toggled by inspectors (`POST`/`DELETE /priority-flags` don't exist yet, only `GET`, and now three separate `GET /priority-flags`-shaped endpoints exist across `routes/priorityFlags.js` and `routes/hse.js` — worth a look at consolidating when this screen gets built). Not built.
 4. **`requiresAction` matrix** — schema/UI now support it per-option (Admin Configuration's option editor has the toggle), but no real values have been filled in — still needs stakeholder input on which findings should auto-open a `CorrectiveAction`.
 5. **Production config** — still SQLite/dev only; Postgres + Render deploy (`render.yaml` pattern from `D:\school project`) not started.
+6. All four roadmap sections are otherwise functionally complete for v1 scope.
 
 ---
 
