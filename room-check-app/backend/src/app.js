@@ -1,9 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { UPLOAD_ROOT } from './middleware/upload.js';
 import { errorHandler } from './utils/errors.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '../..');
+const FRONTEND_DIST = path.resolve(PROJECT_ROOT, 'frontend/dist');
 
 import authRoutes from './routes/auth.js';
 import campRoutes from './routes/camps.js';
@@ -55,6 +62,38 @@ export function createApp() {
   // forwarding, so requests arrive at the root path in dev but at '/api' in prod.
   if (process.env.NODE_ENV !== 'production') mountApiRoutes(app, '');
   mountApiRoutes(app, '/api');
+
+  // In production the built frontend ships alongside the API in the same
+  // service (see render.yaml) — serve it and fall back to index.html for
+  // client-side routes so a browser refresh on e.g. /rooms doesn't 404.
+  const hasFrontend = fs.existsSync(path.join(FRONTEND_DIST, 'index.html'));
+  if (hasFrontend) {
+    app.use(
+      '/assets',
+      express.static(path.join(FRONTEND_DIST, 'assets'), {
+        maxAge: '365d',
+        immutable: true,
+        setHeaders(res) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        },
+      })
+    );
+    app.use(
+      express.static(FRONTEND_DIST, {
+        setHeaders(res, filePath) {
+          if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+        },
+      })
+    );
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+      if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path === '/health') {
+        return next();
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+    });
+  }
 
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(errorHandler);

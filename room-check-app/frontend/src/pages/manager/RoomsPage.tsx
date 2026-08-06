@@ -55,7 +55,7 @@ export default function RoomsPage() {
           Dashboard
         </Link>
       </div>
-      <SupervisorRoomList camp={camp} roomRows={roomRows} onPreviewReport={(id) => navigate(`/inspections/${id}`)} />
+      <SupervisorRoomList camp={camp} roomRows={roomRows} onPreviewReport={(id) => navigate(`/inspections/${id}/report`)} />
     </div>
   );
 }

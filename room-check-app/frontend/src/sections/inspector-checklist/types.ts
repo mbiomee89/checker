@@ -88,6 +88,65 @@ export interface RoomTableProps {
   onPreviewReport?: (inspectionId: number) => void;
 }
 
+export type ActionStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
+
+export interface CorrectiveAction {
+  id: number;
+  roomId: number;
+  roomNumber: string;
+  checklistItemId: number;
+  optionId: number;
+  description: string;
+  status: ActionStatus;
+  dueDate: string | null;
+  createdAt: string;
+}
+
+export interface InspectionReportProps {
+  camp: Camp;
+  checklistItems: ChecklistItem[];
+  inspection: ActiveInspection;
+  correctiveActions?: CorrectiveAction[];
+  onBack?: () => void;
+}
+
+export interface RoomInspectionResponse {
+  checklistItemId: number;
+  selectedOptionIds: number[];
+  optionCounts: Record<number, number>;
+}
+
+export interface RoomInspection {
+  roomId: number;
+  roomNumber: string;
+  approvedCapacity: number | null;
+  inspectedAt: string;
+  inspectorName: string;
+  headcount: number | null;
+  responses: RoomInspectionResponse[];
+}
+
+export interface ActiveFilter {
+  checklistItemId: number;
+  optionId: number;
+}
+
+export interface PriorityFlag {
+  checklistItemId: number;
+  optionId: number;
+}
+
+export interface SupervisorActivityReviewProps {
+  camp: Camp;
+  checklistItems: ChecklistItem[];
+  roomInspections: RoomInspection[];
+  correctiveActions: CorrectiveAction[];
+  priorityFlags: PriorityFlag[];
+  activeFilter?: ActiveFilter | null;
+  onSetFilter?: (filter: ActiveFilter | null) => void;
+  onTogglePriority?: (checklistItemId: number, optionId: number) => void;
+}
+
 export interface InspectionFormProps {
   camp: Camp;
   checklistItems: ChecklistItem[];
