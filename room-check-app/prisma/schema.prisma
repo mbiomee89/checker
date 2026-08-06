@@ -1,0 +1,260 @@
+// Room Check App — Prisma schema (Rev 9 — added ChecklistItemOptionKind + InspectionResponseOption.count for Furniture-style inventory items)
+// Stack: Prisma ORM, SQLite in dev, PostgreSQL in production (mirrors D:\school project)
+//
+// Documented invariants (enforced in the service layer, not the DB):
+// - Inspection.campId is NEVER accepted from the client. It is always copied from
+//   room.campId inside the same transaction that creates the Inspection.
+// - Default clear option: every condition ChecklistItem has exactly one option with
+//   isClearOption=true, canonical label "OK". The inspector form pre-selects it on a
+//   new DRAFT response. Selecting any other option on that item clears OK, and
+//   selecting OK clears all other options on that item. This exclusivity rule only
+//   applies to kind=TOGGLE options.
+// - Exceptions: (1) Room cleanliness keeps its rating scale (Excellent→Unsatisfactory)
+//   with no separate "OK" — UI defaults to "Good – Clean with minor observations".
+//   (2) Furniture is inventory counts (1 bunk, 2 cupboard, …) — options are
+//   kind=COUNT, have no "OK" clear option, and are exempt from the OK exclusivity
+//   rule; repair flags (e.g. cupboard need repair) are separate kind=TOGGLE issue
+//   options alongside the counts.
+// - ChecklistItemOption.kind: TOGGLE (default) is selected/deselected as a whole and
+//   participates in OK exclusivity; COUNT carries a quantity via
+//   InspectionResponseOption.count and is never exclusive with OK. `count` is only
+//   meaningful when kind=COUNT; leave null for TOGGLE selections.
+// - Legacy clear phrases from the SharePoint list (ok and good condition, good and
+//   working, free of insects, free of violation, Present/Working, …) map to "OK"
+//   via the import alias table — they are not seeded as separate live options.
+// - requireAuth must reject users where isActive = false, even with a valid JWT.
+// - CorrectiveAction is a room-level, cross-visit concept: an ongoing issue on a room
+//   (identified by exactly one Room + ChecklistItem + ChecklistItemOption, i.e. one
+//   specific finding) persists and accumulates history across multiple inspection
+//   visits until resolved — it does NOT belong to any single Inspection/
+//   InspectionResponse. @@unique([roomId, checklistItemId, optionId]) enforces at
+//   most one CorrectiveAction record per finding.
+// - CorrectiveAction.description is an append-only log, never overwritten: every
+//   update — a new note or a status change — is prefixed by the service layer with
+//   "[date, author name]: " and appended on its own line, so the field reads as a
+//   complete running history of everyone who touched that finding, not just
+//   free-text notes.
+// - CorrectiveAction has no assignee: it's a shared, camp-wide log any Camp
+//   Supervisor for that camp can add to, not a ticket owned by one person.
+// - The report's paper-form ACTION column is never inspector-authored. It is populated
+//   at render/print time by looking up CorrectiveAction rows matching the room +
+//   checklist item + selected option(s) — there is no InspectionResponse field for it.
+// - PriorityFlag is set only by INSPECTOR-role users (service-layer enforced, not the
+//   DB) — a signal to camp supervisors about which findings to prioritize.
+//   @@unique([campId, checklistItemId, optionId]) means a finding is flagged or not,
+//   camp-wide — no per-room granularity, no severity levels. Toggling off deletes the
+//   row (no history kept).
+// - Inspection.headcount / InspectionResident rows are compared against
+//   Room.approvedCapacity in the service layer to flag overcrowding.
+// - ChecklistItem / ChecklistItemOption are retired via active=false, never
+//   hard-deleted (onDelete: Restrict protects historical responses).
+// - requiresAction matrix is deferred — seed may leave requiresAction=false until
+//   the action matrix is provided; do not block comment-phase seeding on it.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // swapped to "postgresql" in production
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  INSPECTOR
+  CAMP_SUPERVISOR // scoped to one camp; a camp may have multiple active supervisors
+  ADMIN
+  HSE_VIEWER // read-only, cross-camp dashboards; cannot edit checklist config
+}
+
+enum InputType {
+  SINGLE_SELECT
+  MULTI_SELECT
+  TEXT
+}
+
+enum InspectionStatus {
+  DRAFT
+  SUBMITTED
+  CANCELLED
+}
+
+enum ActionStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum ChecklistItemOptionKind {
+  TOGGLE // participates in OK exclusivity; selected/deselected as a whole
+  COUNT // inventory quantity via InspectionResponseOption.count; never exclusive with OK
+}
+
+model Camp {
+  id            Int            @id @default(autoincrement())
+  name          String
+  location      String?
+  rooms         Room[]
+  users         User[]
+  inspections   Inspection[]
+  priorityFlags PriorityFlag[]
+  createdAt     DateTime       @default(now())
+}
+
+model Room {
+  id                Int                @id @default(autoincrement())
+  camp              Camp               @relation(fields: [campId], references: [id])
+  campId            Int
+  roomNumber        String
+  approvedCapacity  Int?
+  inspections       Inspection[]
+  correctiveActions CorrectiveAction[]
+  createdAt         DateTime           @default(now())
+
+  @@unique([campId, roomNumber])
+  @@index([campId])
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  role          Role
+  camp          Camp?          @relation(fields: [campId], references: [id])
+  campId        Int? // null = spans all camps (ADMIN / HSE_VIEWER / INSPECTOR — inspector picks the camp per inspection, not fixed on their profile); required in practice only for CAMP_SUPERVISOR. A camp may have multiple active CAMP_SUPERVISOR users — no per-camp uniqueness constraint.
+  isActive      Boolean        @default(true)
+  inspections   Inspection[]   @relation("InspectorInspections")
+  priorityFlags PriorityFlag[] // set by this user when role=INSPECTOR — see schema header invariants
+  createdAt     DateTime       @default(now())
+
+  @@index([campId])
+}
+
+model ChecklistItem {
+  id                Int                   @id @default(autoincrement())
+  sequenceNo        Int                   @unique
+  name              String
+  inputType         InputType             @default(MULTI_SELECT)
+  active            Boolean               @default(true)
+  options           ChecklistItemOption[]
+  responses         InspectionResponse[]
+  correctiveActions CorrectiveAction[]
+  priorityFlags     PriorityFlag[]
+}
+
+model ChecklistItemOption {
+  id                Int                        @id @default(autoincrement())
+  checklistItem     ChecklistItem              @relation(fields: [checklistItemId], references: [id], onDelete: Restrict)
+  checklistItemId   Int
+  label             String
+  sortOrder         Int                        @default(0)
+  active            Boolean                    @default(true)
+  isClearOption     Boolean                    @default(false) // canonical "OK" default; see schema header invariants
+  requiresAction    Boolean                    @default(false) // deferred matrix — auto-opens CorrectiveAction on submit when true
+  kind              ChecklistItemOptionKind    @default(TOGGLE)
+  responses         InspectionResponseOption[]
+  correctiveActions CorrectiveAction[]
+  priorityFlags     PriorityFlag[]
+
+  @@unique([checklistItemId, label])
+  @@index([checklistItemId])
+}
+
+model Inspection {
+  id          Int                  @id @default(autoincrement())
+  room        Room                 @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  roomId      Int
+  camp        Camp                 @relation(fields: [campId], references: [id], onDelete: Restrict)
+  campId      Int // set from room.campId server-side — see invariants above
+  inspector   User                 @relation("InspectorInspections", fields: [inspectorId], references: [id], onDelete: Restrict)
+  inspectorId Int
+  status      InspectionStatus     @default(DRAFT) // only SUBMITTED appears on the camp supervisor's dashboard; PATCH allowed while DRAFT
+  headcount   Int? // quick count, checked against Room.approvedCapacity
+  notes       String?
+  inspectedAt DateTime             @default(now())
+  createdAt   DateTime             @default(now())
+  residents   InspectionResident[]
+  responses   InspectionResponse[]
+  photos      Photo[] // whole-visit evidence, not per checklist item — max 4 enforced in service layer
+
+  @@index([roomId, inspectedAt])
+  @@index([campId, inspectedAt])
+}
+
+model InspectionResident {
+  id               Int        @id @default(autoincrement())
+  inspection       Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectionId     Int
+  residentIdNumber String // raw ID as recorded on the paper form; not linked to an app User
+
+  @@index([inspectionId])
+}
+
+model InspectionResponse {
+  id              Int                        @id @default(autoincrement())
+  inspection      Inspection                 @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectionId    Int
+  checklistItem   ChecklistItem              @relation(fields: [checklistItemId], references: [id], onDelete: Restrict)
+  checklistItemId Int
+  commentText     String? // inspector's observation (paper form's COMMENT column)
+  textValue       String? // free-text response for TEXT input-type items (e.g. "Additional Notes")
+  selectedOptions InspectionResponseOption[]
+
+  @@unique([inspectionId, checklistItemId])
+}
+
+model InspectionResponseOption {
+  id         Int                 @id @default(autoincrement())
+  response   InspectionResponse  @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  responseId Int
+  option     ChecklistItemOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+  optionId   Int
+  count      Int? // quantity observed; only meaningful when option.kind == COUNT
+
+  @@unique([responseId, optionId])
+}
+
+model Photo {
+  id           Int        @id @default(autoincrement())
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectionId Int
+  filePath     String
+  mimeType     String
+  uploadedAt   DateTime   @default(now())
+
+  @@index([inspectionId])
+}
+
+model CorrectiveAction {
+  id              Int                 @id @default(autoincrement())
+  room            Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId          Int
+  checklistItem   ChecklistItem       @relation(fields: [checklistItemId], references: [id], onDelete: Restrict)
+  checklistItemId Int
+  option          ChecklistItemOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+  optionId        Int // together with roomId + checklistItemId identifies the exact finding — see schema header invariants
+  description     String // append-only log; service layer prefixes each new note with "[date, author]: " — see schema header invariants
+  status          ActionStatus        @default(OPEN)
+  dueDate         DateTime?
+  resolvedAt      DateTime?
+  createdAt       DateTime            @default(now())
+
+  @@unique([roomId, checklistItemId, optionId])
+  @@index([status, dueDate])
+}
+
+model PriorityFlag {
+  id              Int                 @id @default(autoincrement())
+  camp            Camp                @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campId          Int
+  checklistItem   ChecklistItem       @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  checklistItemId Int
+  option          ChecklistItemOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  optionId        Int
+  flaggedBy       User                @relation(fields: [flaggedById], references: [id], onDelete: Restrict)
+  flaggedById     Int
+  flaggedAt       DateTime            @default(now())
+
+  @@unique([campId, checklistItemId, optionId])
+}

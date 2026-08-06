@@ -1,0 +1,22 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.db
+*.db-journal
+room-check-app/backend/uploads/*
+!room-check-app/backend/uploads/.gitkeep
+.DS_Store
+Thumbs.db
+*.log
+.prisma/
+
+# Design OS is its own git repo (planning tool, not app code) — not embedded here
+my-project-design/
+product-plan.zip
+files.zip
+
+# Local Claude Code runtime state, not project config
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

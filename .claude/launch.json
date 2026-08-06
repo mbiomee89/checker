@@ -1,0 +1,22 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "checker-design-os",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "my-project-design", "run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "checker-design-os-attach",
+      "port": 3000,
+      "url": "http://localhost:3000"
+    },
+    {
+      "name": "checker-app-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "room-check-app/frontend", "run", "dev"],
+      "port": 5173
+    }
+  ]
+}
