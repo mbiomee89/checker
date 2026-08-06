@@ -5,6 +5,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validateBody, validateParams, idParam } from '../middleware/validate.js';
 import { notFound, badRequest, conflict } from '../utils/errors.js';
+import { mangle, unmangle } from '../services/softDelete.js';
 
 const router = Router();
 
@@ -20,11 +21,29 @@ function serializeRoom(room) {
   };
 }
 
+function serializeDeletedRoom(room) {
+  return { id: room.id, roomNumber: unmangle(room.roomNumber), campId: room.campId, deletedAt: room.deletedAt };
+}
+
 router.get(
   '/',
   asyncHandler(async (_req, res) => {
-    const rooms = await prisma.room.findMany({ orderBy: [{ campId: 'asc' }, { roomNumber: 'asc' }] });
+    const rooms = await prisma.room.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ campId: 'asc' }, { roomNumber: 'asc' }],
+    });
     res.json({ rooms: rooms.map(serializeRoom) });
+  })
+);
+
+router.get(
+  '/deleted',
+  asyncHandler(async (_req, res) => {
+    const rooms = await prisma.room.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+    });
+    res.json({ rooms: rooms.map(serializeDeletedRoom) });
   })
 );
 
@@ -128,6 +147,50 @@ router.post(
     });
     const rooms = await prisma.room.findMany({ where: { campId, roomNumber: { in: numbers } } });
     res.status(201).json({ rooms: rooms.map(serializeRoom) });
+  })
+);
+
+const deleteSchema = z.object({ confirmRoomNumber: z.string() });
+
+router.delete(
+  '/:id',
+  validateParams(idParam),
+  validateBody(deleteSchema),
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.room.findUnique({ where: { id: req.params.id } });
+    if (!existing) throw notFound('Room not found');
+    if (existing.active) throw badRequest('Retire this room before deleting it');
+    if (req.body.confirmRoomNumber !== existing.roomNumber) {
+      throw badRequest('Confirmation text does not match the room number');
+    }
+
+    await prisma.room.update({
+      where: { id: req.params.id },
+      data: { roomNumber: mangle(existing.roomNumber, existing.id), deletedAt: new Date() },
+    });
+    res.status(204).end();
+  })
+);
+
+router.post(
+  '/:id/restore',
+  validateParams(idParam),
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.room.findUnique({ where: { id: req.params.id } });
+    if (!existing) throw notFound('Room not found');
+    if (!existing.deletedAt) throw badRequest('Room is not deleted');
+
+    const originalNumber = unmangle(existing.roomNumber);
+    const collision = await prisma.room.findFirst({
+      where: { campId: existing.campId, roomNumber: originalNumber, deletedAt: null },
+    });
+    if (collision) throw conflict('A room with that number already exists in this camp — resolve manually');
+
+    const room = await prisma.room.update({
+      where: { id: req.params.id },
+      data: { roomNumber: originalNumber, deletedAt: null },
+    });
+    res.json({ room: serializeRoom(room) });
   })
 );
 

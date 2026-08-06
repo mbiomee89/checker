@@ -1,8 +1,20 @@
 import { apiRequest } from './client';
-import type { Camp } from '../sections/admin-configuration/types';
+import type { Camp, DeletedCamp } from '../sections/admin-configuration/types';
 
 export function listAdminCamps() {
   return apiRequest<{ camps: Camp[] }>('/admin/camps');
+}
+
+export function listDeletedCamps() {
+  return apiRequest<{ camps: DeletedCamp[] }>('/admin/camps/deleted');
+}
+
+export function deleteCamp(id: number, confirmName: string) {
+  return apiRequest<void>(`/admin/camps/${id}`, { method: 'DELETE', body: { confirmName } });
+}
+
+export function restoreCamp(id: number) {
+  return apiRequest<{ camp: Camp }>(`/admin/camps/${id}/restore`, { method: 'POST' });
 }
 
 export function createCamp(body: { name: string; location: string | null }) {

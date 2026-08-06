@@ -8,6 +8,8 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validateBody, validateParams, idParam } from '../middleware/validate.js';
 import { notFound, badRequest, conflict } from '../utils/errors.js';
 import { generateTempPassword, serializeAdminUser } from '../services/users.js';
+import { mangle, unmangle } from '../services/softDelete.js';
+import { forbidden } from '../utils/errors.js';
 
 const router = Router();
 
@@ -20,10 +22,24 @@ router.get(
   '/',
   asyncHandler(async (_req, res) => {
     const users = await prisma.user.findMany({
+      where: { deletedAt: null },
       orderBy: { name: 'asc' },
       include: { roleAssignments: true },
     });
     res.json({ users: users.map(serializeAdminUser) });
+  })
+);
+
+router.get(
+  '/deleted',
+  asyncHandler(async (_req, res) => {
+    const users = await prisma.user.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+    });
+    res.json({
+      users: users.map((u) => ({ id: u.id, name: u.name, email: unmangle(u.email), deletedAt: u.deletedAt })),
+    });
   })
 );
 
@@ -105,6 +121,9 @@ router.patch(
   validateParams(idParam),
   validateBody(activeSchema),
   asyncHandler(async (req, res) => {
+    if (req.params.id === req.user.id && !req.body.active) {
+      throw forbidden('You cannot deactivate your own account — an active admin would have no one left to undo it');
+    }
     const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!existing) throw notFound('User not found');
     const user = await prisma.user.update({
@@ -132,6 +151,49 @@ router.post(
 
     // Returned once, never stored in plaintext, never retrievable again.
     res.json({ tempPassword });
+  })
+);
+
+const deleteSchema = z.object({ confirmEmail: z.string() });
+
+router.delete(
+  '/:id',
+  validateParams(idParam),
+  validateBody(deleteSchema),
+  asyncHandler(async (req, res) => {
+    if (req.params.id === req.user.id) throw forbidden('You cannot delete your own account');
+
+    const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!existing) throw notFound('User not found');
+    if (existing.isActive) throw badRequest('Deactivate this user before deleting it');
+    if (req.body.confirmEmail !== existing.email) throw badRequest('Confirmation text does not match the email');
+
+    await prisma.user.update({
+      where: { id: req.params.id },
+      data: { email: mangle(existing.email, existing.id), deletedAt: new Date() },
+    });
+    res.status(204).end();
+  })
+);
+
+router.post(
+  '/:id/restore',
+  validateParams(idParam),
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!existing) throw notFound('User not found');
+    if (!existing.deletedAt) throw badRequest('User is not deleted');
+
+    const originalEmail = unmangle(existing.email);
+    const collision = await prisma.user.findFirst({ where: { email: originalEmail, deletedAt: null } });
+    if (collision) throw conflict('A user with that email already exists — resolve manually');
+
+    const user = await prisma.user.update({
+      where: { id: req.params.id },
+      data: { email: originalEmail, deletedAt: null },
+      include: { roleAssignments: true },
+    });
+    res.json({ user: serializeAdminUser(user) });
   })
 );
 

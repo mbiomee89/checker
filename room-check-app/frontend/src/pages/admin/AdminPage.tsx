@@ -6,10 +6,39 @@ import type {
   Room,
   AdminUser,
   ChecklistItem,
+  DeletedCamp,
+  DeletedRoom,
+  DeletedUser,
 } from '../../sections/admin-configuration/types';
-import { listAdminCamps, createCamp, updateCamp, setCampActive } from '../../api/adminCamps';
-import { listAdminRooms, createRoom, updateRoom, setRoomActive, createRoomRange } from '../../api/adminRooms';
-import { listAdminUsers, createUser, updateUser, setUserActive, generateCredentials } from '../../api/adminUsers';
+import {
+  listAdminCamps,
+  createCamp,
+  updateCamp,
+  setCampActive,
+  listDeletedCamps,
+  deleteCamp,
+  restoreCamp,
+} from '../../api/adminCamps';
+import {
+  listAdminRooms,
+  createRoom,
+  updateRoom,
+  setRoomActive,
+  createRoomRange,
+  listDeletedRooms,
+  deleteRoom,
+  restoreRoom,
+} from '../../api/adminRooms';
+import {
+  listAdminUsers,
+  createUser,
+  updateUser,
+  setUserActive,
+  generateCredentials,
+  listDeletedUsers,
+  deleteUser,
+  restoreUser,
+} from '../../api/adminUsers';
 import {
   listAdminChecklistItems,
   createChecklistItem,
@@ -25,21 +54,30 @@ export default function AdminPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [deletedCamps, setDeletedCamps] = useState<DeletedCamp[]>([]);
+  const [deletedRooms, setDeletedRooms] = useState<DeletedRoom[]>([]);
+  const [deletedUsers, setDeletedUsers] = useState<DeletedUser[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('camps');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    const [c, r, u, ci] = await Promise.all([
+    const [c, r, u, ci, dc, dr, du] = await Promise.all([
       listAdminCamps(),
       listAdminRooms(),
       listAdminUsers(),
       listAdminChecklistItems(),
+      listDeletedCamps(),
+      listDeletedRooms(),
+      listDeletedUsers(),
     ]);
     setCamps(c.camps);
     setRooms(r.rooms);
     setUsers(u.users);
     setChecklistItems(ci.checklistItems);
+    setDeletedCamps(dc.camps);
+    setDeletedRooms(dr.rooms);
+    setDeletedUsers(du.users);
   }, []);
 
   useEffect(() => {
@@ -72,6 +110,9 @@ export default function AdminPage() {
       rooms={rooms}
       users={users}
       checklistItems={checklistItems}
+      deletedCamps={deletedCamps}
+      deletedRooms={deletedRooms}
+      deletedUsers={deletedUsers}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       onAddCamp={async (camp) => {
@@ -86,6 +127,14 @@ export default function AdminPage() {
         await setCampActive(campId, active);
         await reload();
       }}
+      onDeleteCamp={async (campId, confirmName) => {
+        await deleteCamp(campId, confirmName);
+        await reload();
+      }}
+      onRestoreCamp={async (campId) => {
+        await restoreCamp(campId);
+        await reload();
+      }}
       onAddRoom={async (room) => {
         await createRoom(room);
         await reload();
@@ -96,6 +145,14 @@ export default function AdminPage() {
       }}
       onRetireRoom={async (roomId, active) => {
         await setRoomActive(roomId, active);
+        await reload();
+      }}
+      onDeleteRoom={async (roomId, confirmRoomNumber) => {
+        await deleteRoom(roomId, confirmRoomNumber);
+        await reload();
+      }}
+      onRestoreRoom={async (roomId) => {
+        await restoreRoom(roomId);
         await reload();
       }}
       onAddRoomRange={async (range) => {
@@ -112,6 +169,14 @@ export default function AdminPage() {
       }}
       onSetUserActive={async (userId, active) => {
         await setUserActive(userId, active);
+        await reload();
+      }}
+      onDeleteUser={async (userId, confirmEmail) => {
+        await deleteUser(userId, confirmEmail);
+        await reload();
+      }}
+      onRestoreUser={async (userId) => {
+        await restoreUser(userId);
         await reload();
       }}
       onGenerateCredentials={async (userId) => {

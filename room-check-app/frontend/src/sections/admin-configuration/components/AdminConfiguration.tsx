@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import {
+  AlertTriangle,
   Ban,
   Building2,
   Check,
@@ -13,6 +14,8 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Trash2,
+  Trash as TrashIcon,
   Users as UsersIcon,
   X,
 } from 'lucide-react'
@@ -34,6 +37,7 @@ const TABS: { id: AdminTab; label: string; icon: typeof Building2 }[] = [
   { id: 'rooms', label: 'Rooms', icon: DoorOpen },
   { id: 'users', label: 'Users', icon: UsersIcon },
   { id: 'checklist', label: 'Checklist Template', icon: ListChecks },
+  { id: 'recycle-bin', label: 'Recycle Bin', icon: TrashIcon },
 ]
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -197,6 +201,90 @@ function CredentialsModal({
   )
 }
 
+/** Type-to-confirm dialog for the one truly destructive-looking action in this screen —
+ * "destructive-looking" because it's actually a soft-delete (see Recycle Bin), but the
+ * admin has no way to know that without this being clearly explained up front. */
+function DeleteConfirmModal({
+  title,
+  entityLabel,
+  confirmValue,
+  confirmLabel,
+  onClose,
+  onConfirm,
+}: {
+  title: string
+  entityLabel: string
+  confirmValue: string
+  confirmLabel: string
+  onClose: () => void
+  onConfirm: (typedValue: string) => void
+}) {
+  const [typed, setTyped] = useState('')
+  const matches = typed === confirmValue
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl dark:bg-slate-900">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-white">
+            <AlertTriangle className="size-5 shrink-0 text-red-600 dark:text-red-400" />
+            {title}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="Close"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          <span className="font-semibold">{entityLabel}</span> will disappear from every list here and its{' '}
+          {confirmLabel.toLowerCase()} becomes free for a brand-new entry to reuse. History (inspections,
+          corrective actions) is kept — this moves it to the Recycle Bin, where it can be restored.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (matches) onConfirm(typed)
+          }}
+          className="mt-4"
+        >
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-slate-700 dark:text-slate-200">
+              Type <span className="font-mono font-semibold">{confirmValue}</span> to confirm
+            </span>
+            <input
+              autoFocus
+              className={inputCls()}
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+            />
+          </label>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!matches}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-red-600"
+            >
+              <Trash2 className="size-4" />
+              Delete
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function TableShell({ children }: { children: ReactNode }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
@@ -232,15 +320,18 @@ function CampsTab({
   onAddCamp,
   onEditCamp,
   onRetireCamp,
+  onDeleteCamp,
 }: {
   camps: Camp[]
   onAddCamp: AdminConfigurationProps['onAddCamp']
   onEditCamp: AdminConfigurationProps['onEditCamp']
   onRetireCamp: AdminConfigurationProps['onRetireCamp']
+  onDeleteCamp: AdminConfigurationProps['onDeleteCamp']
 }) {
   const [modal, setModal] = useState<CampModal | null>(null)
   const [name, setName] = useState('')
   const [location, setLocation] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<Camp | null>(null)
 
   function openAdd() {
     setName('')
@@ -312,6 +403,16 @@ function CampsTab({
                     {c.active ? <Ban className="size-3.5" /> : <RotateCcw className="size-3.5" />}
                     {c.active ? 'Retire' : 'Reactivate'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(c)}
+                    disabled={c.active}
+                    title={c.active ? 'Retire this camp first' : undefined}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent dark:text-red-400 dark:hover:bg-red-950/40 dark:disabled:text-slate-700"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </button>
                 </div>
               </td>
             </tr>
@@ -345,6 +446,20 @@ function CampsTab({
           </Field>
         </Modal>
       )}
+
+      {deleteTarget && (
+        <DeleteConfirmModal
+          title={`Delete camp "${deleteTarget.name}"`}
+          entityLabel={deleteTarget.name}
+          confirmValue={deleteTarget.name}
+          confirmLabel="Name"
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={(typed) => {
+            onDeleteCamp?.(deleteTarget.id, typed)
+            setDeleteTarget(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -361,6 +476,7 @@ function RoomsTab({
   onAddRoom,
   onEditRoom,
   onRetireRoom,
+  onDeleteRoom,
   onAddRoomRange,
 }: {
   camps: Camp[]
@@ -368,6 +484,7 @@ function RoomsTab({
   onAddRoom: AdminConfigurationProps['onAddRoom']
   onEditRoom: AdminConfigurationProps['onEditRoom']
   onRetireRoom: AdminConfigurationProps['onRetireRoom']
+  onDeleteRoom: AdminConfigurationProps['onDeleteRoom']
   onAddRoomRange: AdminConfigurationProps['onAddRoomRange']
 }) {
   const [campFilter, setCampFilter] = useState<number | 'all'>('all')
@@ -376,6 +493,7 @@ function RoomsTab({
   const [campId, setCampId] = useState<number | ''>(camps[0]?.id ?? '')
   const [capacity, setCapacity] = useState<string>('')
   const [roomError, setRoomError] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Room | null>(null)
 
   const [rangeOpen, setRangeOpen] = useState(false)
   const [rangeCampId, setRangeCampId] = useState<number | ''>(camps[0]?.id ?? '')
@@ -579,6 +697,16 @@ function RoomsTab({
                     {r.active ? <Ban className="size-3.5" /> : <RotateCcw className="size-3.5" />}
                     {r.active ? 'Retire' : 'Reactivate'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(r)}
+                    disabled={r.active}
+                    title={r.active ? 'Retire this room first' : undefined}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent dark:text-red-400 dark:hover:bg-red-950/40 dark:disabled:text-slate-700"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </button>
                 </div>
               </td>
             </tr>
@@ -701,6 +829,20 @@ function RoomsTab({
           )}
         </Modal>
       )}
+
+      {deleteTarget && (
+        <DeleteConfirmModal
+          title={`Delete room ${deleteTarget.roomNumber}`}
+          entityLabel={`Room ${deleteTarget.roomNumber}`}
+          confirmValue={deleteTarget.roomNumber}
+          confirmLabel="Room number"
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={(typed) => {
+            onDeleteRoom?.(deleteTarget.id, typed)
+            setDeleteTarget(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -717,6 +859,7 @@ function UsersTab({
   onAddUser,
   onEditUser,
   onSetUserActive,
+  onDeleteUser,
   onGenerateCredentials,
 }: {
   camps: Camp[]
@@ -724,6 +867,7 @@ function UsersTab({
   onAddUser: AdminConfigurationProps['onAddUser']
   onEditUser: AdminConfigurationProps['onEditUser']
   onSetUserActive: AdminConfigurationProps['onSetUserActive']
+  onDeleteUser: AdminConfigurationProps['onDeleteUser']
   onGenerateCredentials: AdminConfigurationProps['onGenerateCredentials']
 }) {
   const [modal, setModal] = useState<UserModal | null>(null)
@@ -733,6 +877,7 @@ function UsersTab({
   const [campId, setCampId] = useState<number | ''>('')
   const [rolesError, setRolesError] = useState<string | null>(null)
   const [credModal, setCredModal] = useState<{ user: AdminUser; tempPassword: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
   const needsCamp = roles.includes('CAMP_SUPERVISOR')
 
   function toggleRole(r: UserRole) {
@@ -866,6 +1011,16 @@ function UsersTab({
                     <KeyRound className="size-3.5" />
                     {u.hasCredentials ? 'Reset password' : 'Set up login'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(u)}
+                    disabled={u.active}
+                    title={u.active ? 'Deactivate this user first' : undefined}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent dark:text-red-400 dark:hover:bg-red-950/40 dark:disabled:text-slate-700"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </button>
                 </div>
               </td>
             </tr>
@@ -936,6 +1091,20 @@ function UsersTab({
           userName={credModal.user.name}
           tempPassword={credModal.tempPassword}
           onClose={() => setCredModal(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteConfirmModal
+          title={`Delete user "${deleteTarget.name}"`}
+          entityLabel={deleteTarget.name}
+          confirmValue={deleteTarget.email}
+          confirmLabel="Email"
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={(typed) => {
+            onDeleteUser?.(deleteTarget.id, typed)
+            setDeleteTarget(null)
+          }}
         />
       )}
     </div>
@@ -1281,6 +1450,116 @@ function ChecklistTab({
 }
 
 // ---------------------------------------------------------------------------
+// Recycle Bin
+// ---------------------------------------------------------------------------
+
+function formatDeletedAt(iso: string) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(
+      new Date(iso),
+    )
+  } catch {
+    return iso
+  }
+}
+
+function RecycleBinSection({
+  title,
+  emptyLabel,
+  rows,
+  onRestore,
+}: {
+  title: string
+  emptyLabel: string
+  rows: { id: number; label: string; deletedAt: string }[]
+  onRestore: (id: number) => void
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950">
+      <h2 className="mb-3 text-sm font-semibold tracking-wide text-slate-500 uppercase">{title}</h2>
+      {rows.length === 0 ? (
+        <p className="py-4 text-center text-sm text-slate-500">{emptyLabel}</p>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((row) => (
+            <div
+              key={row.id}
+              className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{row.label}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Deleted {formatDeletedAt(row.deletedAt)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onRestore(row.id)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-xs font-medium text-indigo-800 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-950"
+              >
+                <RotateCcw className="size-3.5" />
+                Restore
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RecycleBinTab({
+  deletedCamps,
+  deletedRooms,
+  deletedUsers,
+  camps,
+  onRestoreCamp,
+  onRestoreRoom,
+  onRestoreUser,
+}: {
+  deletedCamps: NonNullable<AdminConfigurationProps['deletedCamps']>
+  deletedRooms: NonNullable<AdminConfigurationProps['deletedRooms']>
+  deletedUsers: NonNullable<AdminConfigurationProps['deletedUsers']>
+  camps: Camp[]
+  onRestoreCamp: AdminConfigurationProps['onRestoreCamp']
+  onRestoreRoom: AdminConfigurationProps['onRestoreRoom']
+  onRestoreUser: AdminConfigurationProps['onRestoreUser']
+}) {
+  const campName = (id: number) => camps.find((c) => c.id === id)?.name ?? '—'
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Deleted camps, rooms, and users stay here — restoring brings them back with their original name,
+        room number, or email. History (inspections, corrective actions) was never removed.
+      </p>
+      <RecycleBinSection
+        title="Camps"
+        emptyLabel="No deleted camps."
+        rows={deletedCamps.map((c) => ({ id: c.id, label: c.name, deletedAt: c.deletedAt }))}
+        onRestore={(id) => onRestoreCamp?.(id)}
+      />
+      <RecycleBinSection
+        title="Rooms"
+        emptyLabel="No deleted rooms."
+        rows={deletedRooms.map((r) => ({
+          id: r.id,
+          label: `Room ${r.roomNumber} · ${campName(r.campId)}`,
+          deletedAt: r.deletedAt,
+        }))}
+        onRestore={(id) => onRestoreRoom?.(id)}
+      />
+      <RecycleBinSection
+        title="Users"
+        emptyLabel="No deleted users."
+        rows={deletedUsers.map((u) => ({ id: u.id, label: `${u.name} · ${u.email}`, deletedAt: u.deletedAt }))}
+        onRestore={(id) => onRestoreUser?.(id)}
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Root
 // ---------------------------------------------------------------------------
 
@@ -1289,18 +1568,27 @@ export function AdminConfiguration({
   rooms,
   users,
   checklistItems,
+  deletedCamps = [],
+  deletedRooms = [],
+  deletedUsers = [],
   activeTab,
   onTabChange,
   onAddCamp,
   onEditCamp,
   onRetireCamp,
+  onDeleteCamp,
+  onRestoreCamp,
   onAddRoom,
   onEditRoom,
   onRetireRoom,
+  onDeleteRoom,
+  onRestoreRoom,
   onAddRoomRange,
   onAddUser,
   onEditUser,
   onSetUserActive,
+  onDeleteUser,
+  onRestoreUser,
   onGenerateCredentials,
   onAddChecklistItem,
   onEditChecklistItem,
@@ -1352,6 +1640,7 @@ export function AdminConfiguration({
             onAddCamp={onAddCamp}
             onEditCamp={onEditCamp}
             onRetireCamp={onRetireCamp}
+            onDeleteCamp={onDeleteCamp}
           />
         )}
         {tab === 'rooms' && (
@@ -1361,6 +1650,7 @@ export function AdminConfiguration({
             onAddRoom={onAddRoom}
             onEditRoom={onEditRoom}
             onRetireRoom={onRetireRoom}
+            onDeleteRoom={onDeleteRoom}
             onAddRoomRange={onAddRoomRange}
           />
         )}
@@ -1371,6 +1661,7 @@ export function AdminConfiguration({
             onAddUser={onAddUser}
             onEditUser={onEditUser}
             onSetUserActive={onSetUserActive}
+            onDeleteUser={onDeleteUser}
             onGenerateCredentials={onGenerateCredentials}
           />
         )}
@@ -1383,6 +1674,17 @@ export function AdminConfiguration({
             onAddOption={onAddOption}
             onEditOption={onEditOption}
             onRetireOption={onRetireOption}
+          />
+        )}
+        {tab === 'recycle-bin' && (
+          <RecycleBinTab
+            deletedCamps={deletedCamps}
+            deletedRooms={deletedRooms}
+            deletedUsers={deletedUsers}
+            camps={camps}
+            onRestoreCamp={onRestoreCamp}
+            onRestoreRoom={onRestoreRoom}
+            onRestoreUser={onRestoreUser}
           />
         )}
       </div>

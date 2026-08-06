@@ -1,7 +1,7 @@
 export type UserRole = 'INSPECTOR' | 'CAMP_SUPERVISOR' | 'ADMIN' | 'HSE_VIEWER';
 export type InputType = 'SINGLE_SELECT' | 'MULTI_SELECT' | 'TEXT';
 export type OptionKind = 'toggle' | 'count';
-export type AdminTab = 'camps' | 'rooms' | 'users' | 'checklist';
+export type AdminTab = 'camps' | 'rooms' | 'users' | 'checklist' | 'recycle-bin';
 
 export interface Camp {
   id: number;
@@ -49,17 +49,42 @@ export interface ChecklistItem {
   options: ChecklistItemOption[];
 }
 
+export interface DeletedCamp {
+  id: number;
+  name: string;
+  deletedAt: string;
+}
+
+export interface DeletedRoom {
+  id: number;
+  roomNumber: string;
+  campId: number;
+  deletedAt: string;
+}
+
+export interface DeletedUser {
+  id: number;
+  name: string;
+  email: string;
+  deletedAt: string;
+}
+
 export interface AdminConfigurationProps {
   camps: Camp[];
   rooms: Room[];
   users: AdminUser[];
   checklistItems: ChecklistItem[];
+  deletedCamps?: DeletedCamp[];
+  deletedRooms?: DeletedRoom[];
+  deletedUsers?: DeletedUser[];
   activeTab?: AdminTab;
   onTabChange?: (tab: AdminTab) => void;
 
   onAddCamp?: (camp: { name: string; location: string }) => void;
   onEditCamp?: (campId: number, camp: { name: string; location: string }) => void;
   onRetireCamp?: (campId: number, active: boolean) => void;
+  onDeleteCamp?: (campId: number, confirmName: string) => void;
+  onRestoreCamp?: (campId: number) => void;
 
   onAddRoom?: (room: { roomNumber: string; campId: number; approvedCapacity: number | null }) => void;
   onEditRoom?: (
@@ -67,6 +92,8 @@ export interface AdminConfigurationProps {
     room: { roomNumber: string; campId: number; approvedCapacity: number | null }
   ) => void;
   onRetireRoom?: (roomId: number, active: boolean) => void;
+  onDeleteRoom?: (roomId: number, confirmRoomNumber: string) => void;
+  onRestoreRoom?: (roomId: number) => void;
   onAddRoomRange?: (range: {
     campId: number;
     startRoomNumber: number;
@@ -80,6 +107,8 @@ export interface AdminConfigurationProps {
     user: { name: string; email: string; roles: UserRole[]; campId: number | null }
   ) => void;
   onSetUserActive?: (userId: number, active: boolean) => void;
+  onDeleteUser?: (userId: number, confirmEmail: string) => void;
+  onRestoreUser?: (userId: number) => void;
   /** Returns the real, server-generated temp password to display once. */
   onGenerateCredentials?: (userId: number) => Promise<string>;
 

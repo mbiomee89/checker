@@ -1,8 +1,20 @@
 import { apiRequest } from './client';
-import type { AdminUser, UserRole } from '../sections/admin-configuration/types';
+import type { AdminUser, DeletedUser, UserRole } from '../sections/admin-configuration/types';
 
 export function listAdminUsers() {
   return apiRequest<{ users: AdminUser[] }>('/admin/users');
+}
+
+export function listDeletedUsers() {
+  return apiRequest<{ users: DeletedUser[] }>('/admin/users/deleted');
+}
+
+export function deleteUser(id: number, confirmEmail: string) {
+  return apiRequest<void>(`/admin/users/${id}`, { method: 'DELETE', body: { confirmEmail } });
+}
+
+export function restoreUser(id: number) {
+  return apiRequest<{ user: AdminUser }>(`/admin/users/${id}/restore`, { method: 'POST' });
 }
 
 export function createUser(body: { name: string; email: string; roles: UserRole[]; campId: number | null }) {

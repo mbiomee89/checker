@@ -1,8 +1,20 @@
 import { apiRequest } from './client';
-import type { Room } from '../sections/admin-configuration/types';
+import type { Room, DeletedRoom } from '../sections/admin-configuration/types';
 
 export function listAdminRooms() {
   return apiRequest<{ rooms: Room[] }>('/admin/rooms');
+}
+
+export function listDeletedRooms() {
+  return apiRequest<{ rooms: DeletedRoom[] }>('/admin/rooms/deleted');
+}
+
+export function deleteRoom(id: number, confirmRoomNumber: string) {
+  return apiRequest<void>(`/admin/rooms/${id}`, { method: 'DELETE', body: { confirmRoomNumber } });
+}
+
+export function restoreRoom(id: number) {
+  return apiRequest<{ room: Room }>(`/admin/rooms/${id}/restore`, { method: 'POST' });
 }
 
 export function createRoom(body: { roomNumber: string; campId: number; approvedCapacity: number | null }) {
