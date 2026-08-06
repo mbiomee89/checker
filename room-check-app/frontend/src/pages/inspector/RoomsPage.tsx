@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { BarChart3 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { RoomTable } from '../../sections/inspector-checklist/components/RoomTable';
 import type { Camp, RoomRow } from '../../sections/inspector-checklist/types';
 import { listCamps } from '../../api/camps';
@@ -52,25 +51,14 @@ export default function RoomsPage() {
   if (!user) return null;
 
   return (
-    <div>
-      <div className="flex justify-end border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-700 dark:bg-slate-950">
-        <Link
-          to="/rooms/activity"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
-        >
-          <BarChart3 className="size-3.5" />
-          Supervisor activity review
-        </Link>
-      </div>
-      <RoomTable
-        camps={camps}
-        currentUser={{ id: user.id, name: user.name, role: user.activeRole }}
-        roomRows={roomRows}
-        onStartInspection={handleStartInspection}
-        onResumeDraft={(id) => navigate(`/inspections/${id}`)}
-        onViewSubmitted={(id) => navigate(`/inspections/${id}`)}
-        onPreviewReport={(id) => navigate(`/inspections/${id}/report`)}
-      />
-    </div>
+    <RoomTable
+      camps={camps}
+      currentUser={{ id: user.id, name: user.name, role: user.activeRole }}
+      roomRows={roomRows}
+      onStartInspection={handleStartInspection}
+      onResumeDraft={(id) => navigate(`/inspections/${id}`)}
+      onViewSubmitted={(id) => navigate(`/inspections/${id}`)}
+      onPreviewReport={(id) => navigate(`/inspections/${id}/report`)}
+    />
   );
 }

@@ -5,7 +5,7 @@ import { UserMenu, type UserMenuUser } from './UserMenu'
 
 export type AppShellProps = {
   children: ReactNode
-  navigationItems: Array<{ label: string; href: string; isActive?: boolean }>
+  navigationItems: Array<{ label: string; href: string; isActive?: boolean; sub?: boolean }>
   user?: UserMenuUser
   /** Human-readable label per role value, passed through to the user menu's role switcher. */
   roleLabels?: Record<string, string>

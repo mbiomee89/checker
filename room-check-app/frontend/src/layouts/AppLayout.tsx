@@ -39,9 +39,14 @@ export function AppLayout() {
     return <Navigate to={ROLE_HOME[user.activeRole]} replace />;
   }
 
-  const navigationItems = navForRole(user.activeRole).map((item) => ({
+  // Longest matching href wins so e.g. /rooms/activity only highlights the
+  // "Supervisor Activity Review" sub-item, not also its "Inspector Checklist" parent.
+  const roleNav = navForRole(user.activeRole);
+  const matchingHrefs = roleNav.map((item) => item.href).filter((href) => location.pathname.startsWith(href));
+  const bestMatch = matchingHrefs.sort((a, b) => b.length - a.length)[0];
+  const navigationItems = roleNav.map((item) => ({
     ...item,
-    isActive: location.pathname.startsWith(item.href),
+    isActive: item.href === bestMatch,
   }));
 
   async function handleSwitchRole(role: string) {

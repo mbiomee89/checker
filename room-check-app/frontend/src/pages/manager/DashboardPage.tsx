@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ListChecks } from 'lucide-react';
 import { CampSupervisorDashboard } from '../../sections/camp-supervisor-dashboard/components/CampSupervisorDashboard';
 import type {
   Camp,
@@ -70,15 +68,6 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="flex justify-end border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-700 dark:bg-slate-950">
-        <Link
-          to="/dashboard/rooms"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
-        >
-          <ListChecks className="size-3.5" />
-          Room list
-        </Link>
-      </div>
       <CampSupervisorDashboard
         camp={camp}
         currentUser={{ id: user.id, name: user.name }}
