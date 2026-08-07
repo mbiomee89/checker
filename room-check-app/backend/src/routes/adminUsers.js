@@ -96,7 +96,7 @@ router.patch(
     const { name, email, roles, campId } = req.body;
     if (roles.includes('CAMP_SUPERVISOR') && !campId) throw badRequest('Camp Supervisor requires a camp assignment');
 
-    const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.user.findFirst({ where: { id: req.params.id, deletedAt: null } });
     if (!existing) throw notFound('User not found');
 
     try {
@@ -124,7 +124,7 @@ router.patch(
     if (req.params.id === req.user.id && !req.body.active) {
       throw forbidden('You cannot deactivate your own account — an active admin would have no one left to undo it');
     }
-    const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.user.findFirst({ where: { id: req.params.id, deletedAt: null } });
     if (!existing) throw notFound('User not found');
     const user = await prisma.user.update({
       where: { id: req.params.id },
@@ -139,7 +139,7 @@ router.post(
   '/:id/generate-credentials',
   validateParams(idParam),
   asyncHandler(async (req, res) => {
-    const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.user.findFirst({ where: { id: req.params.id, deletedAt: null } });
     if (!existing) throw notFound('User not found');
 
     const tempPassword = generateTempPassword();

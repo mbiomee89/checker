@@ -9,6 +9,7 @@
 import { spawnSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PrismaClient } from '@prisma/client';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -59,14 +60,31 @@ function run(command, args) {
   }
 }
 
+// Only bootstrap with prisma/seed.js on a genuinely empty database. seed.js's upserts
+// are idempotent for *creation* but their `update:` blocks overwrite ChecklistItem/
+// ChecklistItemOption fields back to hardcoded seed values — running it on every boot
+// would silently revert any admin edits made through Admin Configuration after a redeploy.
+async function hasExistingData() {
+  const prisma = new PrismaClient();
+  try {
+    return (await prisma.checklistItem.count()) > 0;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 describeDatabaseUrl(process.env.DATABASE_URL);
 
 // No --accept-data-loss: refuse destructive schema drift rather than wipe data.
 console.log('[start] prisma db push…');
 run('npx', ['prisma', 'db', 'push', '--schema=prisma/schema.prisma']);
 
-console.log('[start] seed…');
-run('node', ['prisma/seed.js']);
+if (await hasExistingData()) {
+  console.log('[start] Data already present — skipping seed (would overwrite admin edits).');
+} else {
+  console.log('[start] Empty database — seeding…');
+  run('node', ['prisma/seed.js']);
+}
 
 console.log('[start] API…');
 run('node', ['backend/src/server.js']);

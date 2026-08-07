@@ -20,12 +20,15 @@
 // - Inspection.campId is NEVER accepted from the client. It is always copied from
 //   room.campId inside the same transaction that creates the Inspection.
 // - Default clear option: every condition ChecklistItem has exactly one option with
-//   isClearOption=true, canonical label "OK". The inspector form pre-selects it on a
-//   new DRAFT response. Selecting any other option on that item clears OK, and
-//   selecting OK clears all other options on that item. This exclusivity rule only
-//   applies to kind=TOGGLE options.
+//   isClearOption=true, canonical label "OK". A new DRAFT response starts with NO
+//   option pre-selected (not even OK) — the inspector must actively choose every
+//   finding. Selecting any other option on that item clears OK, and selecting OK
+//   clears all other options on that item; this exclusivity rule (enforced both
+//   client-side and server-side in PATCH /inspections/:id) only applies to
+//   kind=TOGGLE options. POST /inspections/:id/submit rejects the submission if any
+//   active checklist item still has no response at all (TEXT items are exempt).
 // - Exceptions: (1) Room cleanliness keeps its rating scale (Excellent→Unsatisfactory)
-//   with no separate "OK" — UI defaults to "Good – Clean with minor observations".
+//   with no separate "OK" and no pre-selected default.
 //   (2) Furniture is inventory counts (1 bunk, 2 cupboard, …) — options are
 //   kind=COUNT, have no "OK" clear option, and are exempt from the OK exclusivity
 //   rule; repair flags (e.g. cupboard need repair) are separate kind=TOGGLE issue

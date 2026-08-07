@@ -1,4 +1,5 @@
 import { prisma } from '../utils/prisma.js';
+import { badRequest } from '../utils/errors.js';
 
 // Creates a blank DRAFT response for every active checklist item on a new inspection —
 // no option is pre-selected (not even the "OK" isClearOption or the Cleanliness rating);
@@ -27,6 +28,60 @@ export function mapResponses(responses) {
     }
     return { checklistItemId: resp.checklistItemId, selectedOptionIds, optionCounts };
   });
+}
+
+// An item counts as "answered" for submit-completeness purposes if it has at least one
+// InspectionResponseOption row — that covers both TOGGLE selections (including OK) and
+// COUNT entries (a Furniture count the inspector actually typed), since both land in the
+// same selectedOptions relation. TEXT items (Additional Notes) are always optional.
+export function isItemAnswered(item, response) {
+  if (item.inputType === 'TEXT') return true;
+  return (response?.selectedOptions?.length ?? 0) > 0;
+}
+
+// Validates a PATCH /:id responses[] payload against the real checklist config before
+// it's persisted — every optionId must belong to the checklistItem it's posted under and
+// match the right kind (TOGGLE ids only in selectedOptionIds, COUNT ids only in counts),
+// and TOGGLE selections must respect OK-exclusivity / SINGLE_SELECT single-pick server-side
+// (the client already does this, but the API must not trust it).
+export async function validateResponsePayload(client, responses) {
+  if (!responses || responses.length === 0) return;
+  const itemIds = [...new Set(responses.map((r) => r.checklistItemId))];
+  const items = await client.checklistItem.findMany({
+    where: { id: { in: itemIds } },
+    include: { options: true },
+  });
+  const itemsById = new Map(items.map((i) => [i.id, i]));
+
+  for (const r of responses) {
+    const item = itemsById.get(r.checklistItemId);
+    if (!item) throw badRequest(`Unknown checklist item ${r.checklistItemId}`);
+    const optionsById = new Map(item.options.map((o) => [o.id, o]));
+
+    const selectedIds = r.selectedOptionIds ?? [];
+    for (const id of selectedIds) {
+      const opt = optionsById.get(id);
+      if (!opt || opt.kind !== 'TOGGLE') {
+        throw badRequest(`Option ${id} is not a valid selection for "${item.name}"`);
+      }
+    }
+    for (const optionIdStr of Object.keys(r.counts ?? {})) {
+      const opt = optionsById.get(Number(optionIdStr));
+      if (!opt || opt.kind !== 'COUNT') {
+        throw badRequest(`Option ${optionIdStr} is not a valid count field for "${item.name}"`);
+      }
+    }
+
+    const selectedOptions = selectedIds.map((id) => optionsById.get(id));
+    const hasClear = selectedOptions.some((o) => o.isClearOption);
+    const hasIssue = selectedOptions.some((o) => !o.isClearOption);
+    if (hasClear && hasIssue) {
+      throw badRequest(`"OK" cannot be combined with other findings on "${item.name}"`);
+    }
+    if (item.inputType === 'SINGLE_SELECT' && selectedIds.length > 1) {
+      throw badRequest(`"${item.name}" only allows a single selection`);
+    }
+  }
 }
 
 export function serializeInspection(inspection) {

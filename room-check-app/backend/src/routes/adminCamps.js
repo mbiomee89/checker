@@ -71,7 +71,7 @@ router.patch(
   validateParams(idParam),
   validateBody(campSchema),
   asyncHandler(async (req, res) => {
-    const existing = await prisma.camp.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.camp.findFirst({ where: { id: req.params.id, deletedAt: null } });
     if (!existing) throw notFound('Camp not found');
     const camp = await prisma.camp.update({
       where: { id: req.params.id },
@@ -89,7 +89,7 @@ router.patch(
   validateParams(idParam),
   validateBody(activeSchema),
   asyncHandler(async (req, res) => {
-    const existing = await prisma.camp.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.camp.findFirst({ where: { id: req.params.id, deletedAt: null } });
     if (!existing) throw notFound('Camp not found');
     const camp = await prisma.camp.update({
       where: { id: req.params.id },

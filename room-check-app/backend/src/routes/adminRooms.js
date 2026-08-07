@@ -59,6 +59,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const camp = await prisma.camp.findUnique({ where: { id: req.body.campId } });
     if (!camp) throw notFound('Camp not found');
+    if (!camp.active || camp.deletedAt) throw badRequest('This camp is retired or deleted — restore it before adding rooms');
     try {
       const room = await prisma.room.create({
         data: {
@@ -80,7 +81,7 @@ router.patch(
   validateParams(idParam),
   validateBody(roomSchema),
   asyncHandler(async (req, res) => {
-    const existing = await prisma.room.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.room.findFirst({ where: { id: req.params.id, deletedAt: null } });
     if (!existing) throw notFound('Room not found');
     try {
       const room = await prisma.room.update({
@@ -106,7 +107,7 @@ router.patch(
   validateParams(idParam),
   validateBody(activeSchema),
   asyncHandler(async (req, res) => {
-    const existing = await prisma.room.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.room.findFirst({ where: { id: req.params.id, deletedAt: null } });
     if (!existing) throw notFound('Room not found');
     const room = await prisma.room.update({ where: { id: req.params.id }, data: { active: req.body.active } });
     res.json({ room: serializeRoom(room) });
@@ -130,6 +131,7 @@ router.post(
     const { campId, startRoomNumber, endRoomNumber, approvedCapacity } = req.body;
     const camp = await prisma.camp.findUnique({ where: { id: campId } });
     if (!camp) throw notFound('Camp not found');
+    if (!camp.active || camp.deletedAt) throw badRequest('This camp is retired or deleted — restore it before adding rooms');
 
     const numbers = [];
     for (let n = startRoomNumber; n <= endRoomNumber; n++) numbers.push(String(n));

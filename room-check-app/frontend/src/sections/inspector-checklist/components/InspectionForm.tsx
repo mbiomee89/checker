@@ -29,6 +29,22 @@ function responseFor(
   )
 }
 
+// Mirrors the backend's submit-completeness rule (services/inspections.js `isItemAnswered`) —
+// UX only, the server is the enforced boundary. TEXT items are always optional; everything
+// else needs at least one selected option or a recorded count.
+function unansweredItemNames(
+  items: ChecklistItem[],
+  responses: InspectionResponse[],
+): string[] {
+  return items
+    .filter((item) => {
+      if (item.inputType === 'TEXT') return false
+      const resp = responseFor(responses, item.id)
+      return resp.selectedOptionIds.length === 0 && Object.keys(resp.optionCounts).length === 0
+    })
+    .map((item) => item.name)
+}
+
 function toggleOption(
   item: ChecklistItem,
   selected: number[],
@@ -83,6 +99,11 @@ export function InspectionForm({
   const sortedItems = useMemo(
     () => [...checklistItems].sort((a, b) => a.sequenceNo - b.sequenceNo),
     [checklistItems],
+  )
+
+  const missingItems = useMemo(
+    () => unansweredItemNames(sortedItems, inspection.responses),
+    [sortedItems, inspection.responses],
   )
 
   return (
@@ -388,6 +409,13 @@ export function InspectionForm({
           )}
         </section>
 
+        {!readOnly && missingItems.length > 0 && (
+          <div className="rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+            <p className="font-semibold">Still needs a response before you can submit:</p>
+            <p className="mt-1">{missingItems.join(', ')}</p>
+          </div>
+        )}
+
         {!readOnly && (
           <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:justify-end">
             <button
@@ -407,8 +435,9 @@ export function InspectionForm({
             </button>
             <button
               type="button"
+              disabled={missingItems.length > 0}
               onClick={() => onSubmit?.()}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 disabled:hover:bg-blue-300 dark:disabled:bg-blue-900"
             >
               <Send className="size-4 shrink-0" />
               Submit

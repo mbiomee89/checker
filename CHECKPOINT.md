@@ -1,8 +1,8 @@
 # Checker — Agent Checkpoint
 
-**Date:** 2026-08-06
+**Date:** 2026-08-07
 **Product:** Checker (IKK Group room housekeeping inspections)
-**Handoff purpose:** All four roadmap sections plus every previously-deferred secondary screen are now built and verified — the app is feature-complete for v1 scope except two items that were explicitly left for a human (see "Not done"). Production deploy config is prepared but no live deploy has happened. This session also added an Admin **Recycle Bin** (soft-delete for camps/rooms/users) on top of that.
+**Handoff purpose:** All four roadmap sections plus every previously-deferred secondary screen are now built and verified — the app is feature-complete for v1 scope except two items that were explicitly left for a human (see "Not done"). Production deploy config is prepared but no live deploy has happened. This session also added an Admin **Recycle Bin** (soft-delete for camps/rooms/users), then fixed a round of findings from the user's team's code review — most notably a real IDOR on draft inspections.
 
 ---
 
@@ -69,14 +69,42 @@
 
 **Seed data** (`prisma/seed.js`, idempotent, unchanged): 13 checklist items, 2 camps, 11 rooms, 5 accounts (password `Password123!`): `admin@checker.local`, `inspector@checker.local`, `supervisor@checker.local` (CAMP_SUPERVISOR/Arabian Gulf), `hse@checker.local`, `fatima@checker.local` (ADMIN + HSE_VIEWER, role-switcher demo). Running `node prisma/seed.js` still recreates all of this from scratch.
 
-**Local dev DB was wiped this session** via new `scripts/reset-data.js` (run with `node scripts/reset-data.js` from `room-check-app/`) — the user asked to clear all demo/seed content and start the admin panel from a clean slate before entering real data. It deletes every Camp/Room/Inspection/CorrectiveAction/PriorityFlag and every User except `admin@checker.local`, but **deliberately keeps the checklist template** (`ChecklistItem`/`ChecklistItemOption`) since those are the real inspection questions, not demo content — confirmed via AskUserQuestion before running. Right now the dev DB has only the checklist template + one admin login; no camps/rooms/other users exist until re-added through Admin Configuration (or by rerunning `prisma/seed.js`, which is unaffected by this script and will recreate the demo data on top of whatever's there).
+**`scripts/reset-data.js`** (added this session, run once via `node scripts/reset-data.js` from `room-check-app/`) — wipes all demo camps/rooms/users/inspections/history but keeps the checklist template and the `admin@checker.local` account, for starting the admin panel from a clean slate before entering real data. Was run once mid-session per explicit request; `node prisma/seed.js` was then rerun afterward (unaffected by this script) to restore demo data for testing the review fixes below — **the dev DB currently has the full seed data back in it**, not the wiped state.
+
+---
+
+## Code-review fix pass (this session)
+
+The user's team reviewed the app and reported findings across Critical/Medium/Minor. Every finding was read and verified against the code (not assumed) before fixing. Two decisions were confirmed with the user first: the submit-completeness rule is **"every checklist item must have a response"** (not just headcount), and the deploy/infra-only findings (`render.yaml` placement, `db push` vs migrations, ephemeral uploads on Render's free tier) are **held for when deployment actually happens**, matching the existing decision that deploying is a separate confirmed step.
+
+**Fixed — Critical:**
+- **Draft ownership IDOR** (`routes/inspections.js`) — any inspector could view/edit/submit/photo *any other inspector's* DRAFT, and `POST /inspections` handed over any room's open draft regardless of who created it. Added `assertOwnsDraft` (checked on GET/PATCH/submit/photo-upload/photo-delete); `POST /` now 409s ("already has an inspection in progress by another inspector") if a *different* inspector already holds the room's open draft, instead of resuming it.
+- **Blank submit allowed** — `POST /inspections/:id/submit` now 400s listing every unanswered active checklist item by name before allowing `SUBMITTED`; `isItemAnswered`/`unansweredItemNames` (`services/inspections.js` / mirrored in `InspectionForm.tsx`) treat TEXT items as always-optional and everything else as answered once it has at least one selected option or count. The Submit button is now disabled client-side with a live "still needs a response" banner naming the missing items — server is still the enforced boundary.
+- **`requiresAction` unused on submit** — now wired: on submit, every selected TOGGLE option with `requiresAction=true` opens (or, if one already exists for that exact room+item+option, appends a note to) a `CorrectiveAction`, reusing the existing `appendNote`/`logPrefix` append-only convention. Still inert in practice since all seeded `requiresAction` flags are `false` (still deliberately deferred — see "Not done" below) but the mechanism is now correct.
+- **Create on inactive/deleted rooms** — `POST /inspections` 400s if the room is retired or soft-deleted.
+- **Admin room creation under inactive/deleted camps** — `adminRooms.js` `POST /` and `POST /range` 400 if the target camp is retired or deleted.
+- **Prod start re-seeding every boot** — `scripts/start.js` now only runs `prisma/seed.js` when `checklistItem.count() === 0`; a populated DB skips seeding so a redeploy can no longer silently revert admin edits to the checklist template.
+
+**Fixed — Medium:**
+- `latest-by-room` now excludes retired/deleted rooms.
+- `PATCH /inspections/:id` now validates every `optionId` in a `responses[]` payload actually belongs to the stated `checklistItemId` and matches the right `kind` (TOGGLE vs COUNT), and enforces OK-exclusivity and SINGLE_SELECT single-pick **server-side** (`validateResponsePayload` in `services/inspections.js`) — previously only the client enforced this.
+- FE `/hse` now allows `ADMIN` (matching the backend, which always did) — `shared/accessControl.ts`.
+- Admin `PATCH /:id`, `PATCH /:id/active`, and `generate-credentials` (camps/rooms/users) now all require `deletedAt: null`, so a soft-deleted (Recycle Bin) row can no longer be edited/reactivated/issued credentials directly — must be restored first.
+- Login now honors `location.state.from` after a successful login, not just on the already-authenticated redirect — lands back on the originally-requested route.
+- `schema.prisma` header updated to describe the current blank-default + submit-completeness behavior (was still describing the old OK/Good pre-selection this session had already removed in code).
+
+**Flagged, deliberately not fixed** (need the user's call, not mine — see the plan file's reasoning for each): `/uploads` isn't access-controlled (mitigated by 128-bit random filenames, but not a real fix); seed label `"label not updated"` reads like real inspection content, not a placeholder; dead `commentText` field (API-only, no UI); duplicate section `types.ts` per role (refactor, not a bug).
+
+**Verified**: `npx tsc -b` clean; two-inspector IDOR test (403 on cross-inspector GET/PATCH/submit, 409 on double-create) via a throwaway test account (created and deleted after); blank submit 400 → full submit 200 with `requiresAction` auto-opening a `CorrectiveAction`; cross-item/cross-kind optionId rejected 400; OK+issue combo and SINGLE_SELECT multi-pick both rejected 400; room creation under a retired camp blocked 400; retired room excluded from `latest-by-room`; PATCH on a soft-deleted room 404s; ADMIN reaches `/hse` with no console errors; login redirect confirmed via `location.state.from` round-trip; Submit button disabled+bannered on a fresh draft, live-updates as items are answered, enables once complete — all confirmed via real browser interaction, not just curl.
 
 ---
 
 ## Not done — both require a human, not more building
 
-1. **Real `requiresAction` values** — the toggle exists in Admin Configuration's checklist option editor; no findings have been marked yet. Needs someone with IKK's operational knowledge to decide which findings should auto-open a `CorrectiveAction`. Do not invent values.
-2. **Actually deploying to Render** — needs a Render account and someone to click through the Blueprint flow / paste the External Database URL. Config is ready (`render.yaml` + scripts), but this session has no account access and deploying is explicitly a separate confirmed action, not something to do proactively.
+1. **Real `requiresAction` values** — the toggle exists in Admin Configuration's checklist option editor, and submit-time auto-opening of `CorrectiveAction`s is now fully wired (see review-fix pass above); no findings have been marked yet. Needs someone with IKK's operational knowledge to decide which findings should auto-open a `CorrectiveAction`. Do not invent values.
+2. **Actually deploying to Render** — needs a Render account and someone to click through the Blueprint flow / paste the External Database URL. Config is ready (`render.yaml` + scripts), but this session has no account access and deploying is explicitly a separate confirmed action, not something to do proactively. `render.yaml`'s placement under `room-check-app/` with no `rootDir` is a known open item for whoever does this — deliberately held, see the review-fix pass.
+3. **`/uploads` access control** — photo URLs aren't auth-gated (mitigated by unguessable random filenames, but not a real fix). Flagged during the code-review pass; a real fix needs a signed-URL or authenticated-proxy design decision, not a quick patch.
+4. **Dead `commentText` field** — exists in the schema/API, no UI reads or writes it. Either wire it into the form or drop it from the schema — flagged, not decided.
 
 Everything else from earlier "Not done" lists is now built.
 
@@ -112,3 +140,7 @@ Or via Claude Code's Browser preview tool: `.claude/launch.json` has a `checker-
 - Priority flags are INSPECTOR-only to write, camp-wide, no history on removal — don't add per-room granularity or an edit history without a spec change
 - The printable report is one shared component reused by both roles — don't fork it into two copies like the original design's per-section export did
 - Don't deploy to Render without the user's explicit go-ahead — the config is prepared, not applied
+- DRAFT inspections are owned by the inspector who created them — every view/mutation route must check `inspectorId === req.user.id` (ADMIN keeps its full-view bypass); don't let `POST /inspections` hand over another inspector's open draft
+- A submitted inspection must have a response on every active checklist item — don't relax the `isItemAnswered` completeness check without an explicit product decision
+- `scripts/start.js` only seeds an empty database — don't make it reseed unconditionally again, that silently reverts admin edits to the checklist template on every redeploy
+- Admin `PATCH`/`generate-credentials` endpoints must keep excluding soft-deleted (Recycle Bin) rows — a deleted row can only be reactivated through `POST /:id/restore`, never edited directly

@@ -20,7 +20,8 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(email, password);
-      navigate('/', { replace: true });
+      const from = (location.state as { from?: string })?.from;
+      navigate(from ?? '/', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     }
