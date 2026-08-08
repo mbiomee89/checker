@@ -63,10 +63,13 @@ function run(command, args) {
   }
 }
 
-// Only bootstrap with prisma/seed.js on a genuinely empty database. seed.js's upserts
-// are idempotent for *creation* but their `update:` blocks overwrite ChecklistItem/
-// ChecklistItemOption fields back to hardcoded seed values — running it on every boot
-// would silently revert any admin edits made through Admin Configuration after a redeploy.
+// Only bootstrap on a genuinely empty database, and only with prisma/seed-prod.js —
+// NOT prisma/seed.js, which creates local-dev demo accounts sharing a password
+// ('Password123!') that's printed in this repo's own README/CHECKPOINT docs. seed-prod.js
+// creates just the real checklist template plus one admin account with a randomly
+// generated password, forced to be changed on first login. Running either seeder on
+// every boot would also overwrite any admin edits to the checklist made through Admin
+// Configuration after a redeploy — the empty-database check guards against that too.
 async function hasExistingData() {
   const prisma = new PrismaClient();
   try {
@@ -85,8 +88,8 @@ run('npx', ['prisma', 'db', 'push', '--schema=prisma/schema.prisma']);
 if (await hasExistingData()) {
   console.log('[start] Data already present — skipping seed (would overwrite admin edits).');
 } else {
-  console.log('[start] Empty database — seeding…');
-  run('node', ['prisma/seed.js']);
+  console.log('[start] Empty database — bootstrapping checklist template + admin account…');
+  run('node', ['prisma/seed-prod.js']);
 }
 
 console.log('[start] API…');

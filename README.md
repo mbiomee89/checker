@@ -49,6 +49,9 @@ needs:
    - `JWT_EXPIRES_IN` — e.g. `8h`
    - `NODE_ENV=production`
    - `UPLOAD_DIR` — e.g. `./backend/uploads` (see the storage note below)
+   - `ADMIN_EMAIL` — optional, the email for the first admin account created on first
+     boot (defaults to `admin@checker.local` if unset — just an identifier, see below for
+     why the password isn't something you set here)
    - `CORS_ORIGIN` — optional, comma-separated allowlist; only needed if the frontend is
      served from a different origin than the API (this app serves both from the same
      process by default, so usually leave unset)
@@ -57,10 +60,17 @@ needs:
    generates the Prisma client, and builds the frontend.
 5. **Start command**: `node scripts/start.js` (run from `room-check-app/`) — validates
    `DATABASE_URL`, applies the schema with `prisma db push` (deliberately not
-   `--accept-data-loss`, so it refuses to silently drop data on a schema conflict), seeds
-   demo data **only if the database is empty**, then boots the API. The Express server
-   also serves the built frontend and falls back to `index.html` for client-side routes,
-   so one process is all that's needed — no separate static host.
+   `--accept-data-loss`, so it refuses to silently drop data on a schema conflict), then
+   **only if the database is completely empty**: creates the 13-item checklist template
+   and a single admin account with a randomly generated password, printed once to the
+   boot logs, forced to be changed the moment that account logs in. Then boots the API.
+   The Express server also serves the built frontend and falls back to `index.html` for
+   client-side routes, so one process is all that's needed — no separate static host.
+   **Grab that first-boot password from the platform's deploy/boot logs right away** —
+   it's shown exactly once and never stored anywhere in plaintext. (Local dev uses a
+   different seeder, `prisma/seed.js`, with full demo data and a fixed password — that
+   one is never used in production, on purpose, since its password is public in this
+   repo's own docs.)
 6. **Health check**: `GET /health` returns `{"ok": true}` — wire this up if the host
    supports a health-check path.
 
