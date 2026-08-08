@@ -23,7 +23,7 @@ export const NAV_CATALOG: NavEntry[] = [
   { label: 'Camp Supervisor Dashboard', href: '/dashboard', roles: ['CAMP_SUPERVISOR'] },
   { label: 'Room List', href: '/dashboard/rooms', roles: ['CAMP_SUPERVISOR'], sub: true },
   { label: 'Admin Configuration', href: '/admin', roles: ['ADMIN'] },
-  { label: 'HSE Overview', href: '/hse', roles: ['HSE_VIEWER', 'ADMIN'] },
+  { label: 'HSE Overview', href: '/hse', roles: ['HSE_VIEWER'] },
 ];
 
 export function navForRole(role: Role) {
@@ -34,7 +34,7 @@ const SECTION_ALLOWED_ROLES: Record<string, Role[]> = {
   '/rooms': ['INSPECTOR'],
   '/dashboard': ['CAMP_SUPERVISOR'],
   '/admin': ['ADMIN'],
-  '/hse': ['HSE_VIEWER', 'ADMIN'],
+  '/hse': ['HSE_VIEWER'],
 };
 
 export function roleMayAccessPath(role: Role, pathname: string): boolean {

@@ -88,14 +88,27 @@ The user's team reviewed the app and reported findings across Critical/Medium/Mi
 **Fixed — Medium:**
 - `latest-by-room` now excludes retired/deleted rooms.
 - `PATCH /inspections/:id` now validates every `optionId` in a `responses[]` payload actually belongs to the stated `checklistItemId` and matches the right `kind` (TOGGLE vs COUNT), and enforces OK-exclusivity and SINGLE_SELECT single-pick **server-side** (`validateResponsePayload` in `services/inspections.js`) — previously only the client enforced this.
-- FE `/hse` now allows `ADMIN` (matching the backend, which always did) — `shared/accessControl.ts`.
+- ~~FE `/hse` now allows `ADMIN` (matching the backend, which always did) — `shared/accessControl.ts`.~~ **Reverted later this checkpoint** — see "Strict role-scoped access" below.
 - Admin `PATCH /:id`, `PATCH /:id/active`, and `generate-credentials` (camps/rooms/users) now all require `deletedAt: null`, so a soft-deleted (Recycle Bin) row can no longer be edited/reactivated/issued credentials directly — must be restored first.
 - Login now honors `location.state.from` after a successful login, not just on the already-authenticated redirect — lands back on the originally-requested route.
 - `schema.prisma` header updated to describe the current blank-default + submit-completeness behavior (was still describing the old OK/Good pre-selection this session had already removed in code).
 
 **Flagged, deliberately not fixed** (need the user's call, not mine — see the plan file's reasoning for each): `/uploads` isn't access-controlled (mitigated by 128-bit random filenames, but not a real fix); seed label `"label not updated"` reads like real inspection content, not a placeholder; dead `commentText` field (API-only, no UI); duplicate section `types.ts` per role (refactor, not a bug).
 
-**Verified**: `npx tsc -b` clean; two-inspector IDOR test (403 on cross-inspector GET/PATCH/submit, 409 on double-create) via a throwaway test account (created and deleted after); blank submit 400 → full submit 200 with `requiresAction` auto-opening a `CorrectiveAction`; cross-item/cross-kind optionId rejected 400; OK+issue combo and SINGLE_SELECT multi-pick both rejected 400; room creation under a retired camp blocked 400; retired room excluded from `latest-by-room`; PATCH on a soft-deleted room 404s; ADMIN reaches `/hse` with no console errors; login redirect confirmed via `location.state.from` round-trip; Submit button disabled+bannered on a fresh draft, live-updates as items are answered, enables once complete — all confirmed via real browser interaction, not just curl.
+**Verified**: `npx tsc -b` clean; two-inspector IDOR test (403 on cross-inspector GET/PATCH/submit, 409 on double-create) via a throwaway test account (created and deleted after); blank submit 400 → full submit 200 with `requiresAction` auto-opening a `CorrectiveAction`; cross-item/cross-kind optionId rejected 400; OK+issue combo and SINGLE_SELECT multi-pick both rejected 400; room creation under a retired camp blocked 400; retired room excluded from `latest-by-room`; PATCH on a soft-deleted room 404s; login redirect confirmed via `location.state.from` round-trip; Submit button disabled+bannered on a fresh draft, live-updates as items are answered, enables once complete — all confirmed via real browser interaction, not just curl.
+
+## Strict role-scoped access (reverted the ADMIN/HSE cross-access from the review-fix pass above)
+
+The code-review pass above loosened the frontend to let `ADMIN` view `/hse`, matching the backend's `requireRole('ADMIN', 'HSE_VIEWER')` (which predates this whole session — original HSE Overview build). The user explicitly overrode that afterward: **"every one should see the page he is assigned to"** — a general strict-role-separation principle, not specific to HSE. Reverted both sides so `HSE_VIEWER` is the only role that can reach HSE Overview:
+
+- `backend/src/routes/hse.js`: `requireRole('ADMIN', 'HSE_VIEWER')` → `requireRole('HSE_VIEWER')`.
+- `frontend/src/shared/accessControl.ts`: removed `'ADMIN'` from both the `/hse` entry in `SECTION_ALLOWED_ROLES` and the `HSE Overview` `NAV_CATALOG` entry's `roles`.
+
+Verified: ADMIN's sidebar now shows only "Admin Configuration"; ADMIN navigating directly to `/hse` bounces to `/admin` (`roleMayAccessPath` + `ROLE_HOME`); `GET /api/hse/room-inspections` as ADMIN now 403s. HSE_VIEWER's own access is untouched (that code path was never changed).
+
+**This principle is stated generally, not just for HSE** — if similar cross-role allowances turn up elsewhere (none currently exist; checked `requireRole('ADMIN', ...)` across all routes and `hse.js` was the only combined-role case), the same strict-separation call should apply unless the user says otherwise for that specific case. `ADMIN`'s ability to *view* (not edit) any inspection via `assertCanView` in `inspections.js` was deliberately left alone — that's a support/audit bypass on an individual resource, not a whole section a role isn't "assigned to," and wasn't part of what was raised.
+
+**Also worth knowing for local dev**: `node --watch backend/src/server.js` produced a stale/zombie listener on port 3001 twice this session after file edits triggered a restart (old process kept the port, new requests got inconsistent results — e.g. valid credentials returning "Invalid email or password"). If login unexpectedly fails against a backend that was just edited, check `netstat -ano | grep :3001` for the actual PID, kill it, and start fresh — plain `node backend/src/server.js` (no `--watch`) avoided the issue on retry.
 
 ---
 

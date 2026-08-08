@@ -9,7 +9,7 @@ import { serializeCampRoomInspection, monthRange, monthOf } from '../services/hs
 
 const router = Router();
 
-router.use(requireAuth, requireRole('ADMIN', 'HSE_VIEWER'));
+router.use(requireAuth, requireRole('HSE_VIEWER'));
 
 router.get(
   '/room-inspections',
