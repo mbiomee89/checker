@@ -1,10 +1,13 @@
 /**
- * Render start: validate DATABASE_URL, push schema, seed, then boot API.
- * Avoids cryptic Prisma P1001 when DATABASE_URL is missing/malformed.
+ * Production start (any Node + Postgres host): validate DATABASE_URL, push
+ * schema, seed, then boot API. Avoids a cryptic Prisma P1001 when DATABASE_URL
+ * is missing/malformed. Run `scripts/build.sh` first as the platform's build
+ * step, then run this as the start command.
  *
  * Schema apply: prefer `prisma migrate deploy` once a baseline migration exists
- * for both sqlite (local) and postgres (Render sed in render-build.sh). Until
- * then, `db push` WITHOUT `--accept-data-loss` to avoid silent drops.
+ * for both sqlite (local) and postgres (schema.prisma's provider is switched to
+ * postgresql at build time by scripts/build.sh). Until then, `db push` WITHOUT
+ * `--accept-data-loss` to avoid silent drops.
  */
 import { spawnSync } from 'child_process';
 import path from 'path';
@@ -21,7 +24,7 @@ function fail(msg) {
 function describeDatabaseUrl(raw) {
   if (!raw || typeof raw !== 'string') {
     fail(
-      'DATABASE_URL is missing. In Render → checker-db → Info, copy the External Database URL and set it on checker → Environment → DATABASE_URL.'
+      'DATABASE_URL is missing. Set it in your hosting platform\'s environment variables to your Postgres connection string.'
     );
   }
 
@@ -30,7 +33,7 @@ function describeDatabaseUrl(raw) {
     url = new URL(raw);
   } catch {
     fail(
-      `DATABASE_URL is not a valid URL (got: ${JSON.stringify(raw.slice(0, 40))}…). Paste the full External Database URL from Render (starts with postgresql://).`
+      `DATABASE_URL is not a valid URL (got: ${JSON.stringify(raw.slice(0, 40))}…). Paste the full Postgres connection string (starts with postgresql://).`
     );
   }
 
@@ -41,7 +44,7 @@ function describeDatabaseUrl(raw) {
   const host = url.hostname;
   if (!host || host === 'postgresql' || host === 'postgres' || host === 'localhost') {
     fail(
-      `DATABASE_URL hostname looks wrong: "${host}". Use Render's External Database URL, e.g. postgresql://USER:PASS@dpg-xxxx.oregon-postgres.render.com/DBNAME`
+      `DATABASE_URL hostname looks wrong: "${host}". Use the real Postgres host your provider gives you, e.g. postgresql://USER:PASS@your-db-host.example.com/DBNAME`
     );
   }
 

@@ -1,8 +1,8 @@
 # Checker — Agent Checkpoint
 
-**Date:** 2026-08-07
+**Date:** 2026-08-08
 **Product:** Checker (IKK Group room housekeeping inspections)
-**Handoff purpose:** All four roadmap sections plus every previously-deferred secondary screen are now built and verified — the app is feature-complete for v1 scope except two items that were explicitly left for a human (see "Not done"). Production deploy config is prepared but no live deploy has happened. This session also added an Admin **Recycle Bin** (soft-delete for camps/rooms/users), then fixed a round of findings from the user's team's code review — most notably a real IDOR on draft inspections.
+**Handoff purpose:** All four roadmap sections plus every previously-deferred secondary screen are now built and verified — the app is feature-complete for v1 scope except a few items explicitly left for a human (see "Not done"). This session also added an Admin **Recycle Bin** (soft-delete for camps/rooms/users), fixed a round of findings from the user's team's code review (most notably a real IDOR on draft inspections), and made the repo ready to hand off to a partner for hosting — see "Deploying" below. **The repo no longer targets Render specifically**; build/start scripts are host-agnostic (any Node 20+ runtime + Postgres).
 
 ---
 
@@ -56,7 +56,7 @@
 
 - **Printable inspection report** (`sections/inspector-checklist/components/InspectionReport.tsx`, ported from the design — the inspector's and supervisor's versions were near-identical duplicates in the design's per-section export convention, so **one shared component** is used from both roles' "Report" buttons instead of two copies). Route `/inspections/:id/report` (`pages/inspections/ReportPage.tsx`), reachable from both `pages/inspector/RoomsPage.tsx` and `pages/manager/RoomsPage.tsx`. Letterhead uses the original paper-form wording (`ORIGINAL_DESCRIPTIONS`, distinct from the shorter in-app labels) and `frontend/public/company-logo.jpg` (copied from the design). "Include corrective actions" checkbox populates the ACTION column from `GET /corrective-actions?campId=` (already role-agnostic for reads). Verified: logo loads, table renders correctly, `window.print()` button present.
 - **Inspector's Supervisor Activity Review** (`sections/inspector-checklist/components/SupervisorActivityReview.tsx`), route `/rooms/activity` (`pages/inspector/ActivityReviewPage.tsx`, linked from `RoomsPage`) — any INSPECTOR can review any camp's findings/corrective-actions read-only via its own camp switcher, with one write capability: the flag-icon priority toggle. Backend: `POST`/`DELETE /priority-flags` added to `routes/priorityFlags.js`, `requireRole('INSPECTOR')`, upsert-or-noop on the existing `@@unique([campId, checklistItemId, optionId])`. Verified end-to-end: toggle flag on/off through the real UI, persists across reload, and **shows up on the Camp Supervisor Dashboard's flag marker for the same camp/finding** (cross-screen round-trip confirmed).
-- **Production config, prepared but not deployed**: `room-check-app/render.yaml`, `scripts/render-build.sh` (sed's the schema to `postgresql` for the build only, local dev stays sqlite), `scripts/start.js` (validates `DATABASE_URL` shape with the same tested error messages as `D:\school project`, `prisma db push` without `--accept-data-loss`, seeds, boots). `backend/src/app.js` now serves `frontend/dist` as a SPA fallback when `NODE_ENV=production` (mirrors the reference project's exact pattern — hashed `/assets` cached forever, `index.html` no-cache, GET/HEAD-only fallback that skips `/api`, `/uploads`, `/health`). **No Render account was touched** — deploying is a separate, explicitly-confirmed step for whoever has account access.
+- **Production config, prepared but not deployed** (originally Render-targeted, later genericized — see "Deploying" below): `scripts/build.sh` (sed's the schema to `postgresql` for the build only, local dev stays sqlite), `scripts/start.js` (validates `DATABASE_URL` shape, `prisma db push` without `--accept-data-loss`, seeds only an empty DB, boots). `backend/src/app.js` serves `frontend/dist` as a SPA fallback when `NODE_ENV=production` — hashed `/assets` cached forever, `index.html` no-cache, GET/HEAD-only fallback that skips `/api`, `/uploads`, `/health`. **No hosting account of any kind was touched** — deploying is a separate, explicitly-confirmed step for whoever has account access.
 
 **New this session — Admin Recycle Bin** (delete camp/room/user from the admin panel, without losing history):
 
@@ -102,9 +102,10 @@ The user's team reviewed the app and reported findings across Critical/Medium/Mi
 ## Not done — both require a human, not more building
 
 1. **Real `requiresAction` values** — the toggle exists in Admin Configuration's checklist option editor, and submit-time auto-opening of `CorrectiveAction`s is now fully wired (see review-fix pass above); no findings have been marked yet. Needs someone with IKK's operational knowledge to decide which findings should auto-open a `CorrectiveAction`. Do not invent values.
-2. **Actually deploying to Render** — needs a Render account and someone to click through the Blueprint flow / paste the External Database URL. Config is ready (`render.yaml` + scripts), but this session has no account access and deploying is explicitly a separate confirmed action, not something to do proactively. `render.yaml`'s placement under `room-check-app/` with no `rootDir` is a known open item for whoever does this — deliberately held, see the review-fix pass.
-3. **`/uploads` access control** — photo URLs aren't auth-gated (mitigated by unguessable random filenames, but not a real fix). Flagged during the code-review pass; a real fix needs a signed-URL or authenticated-proxy design decision, not a quick patch.
-4. **Dead `commentText` field** — exists in the schema/API, no UI reads or writes it. Either wire it into the form or drop it from the schema — flagged, not decided.
+2. **Actually deploying** — the user confirmed **Render is out**; hosting platform is undecided as of this checkpoint (their partner will pick one). Build/start scripts are now host-agnostic — see "Deploying" below. No hosting account of any kind has been touched.
+3. **Uploaded-photo persistence** — depends entirely on whatever platform gets picked. `UPLOAD_DIR` writes to local disk; if the eventual host doesn't give it a persistent volume, photos vanish on restart/redeploy. Needs to be checked against the actual platform once chosen, or moved to object storage (S3-compatible) — not built.
+4. **`/uploads` access control** — photo URLs aren't auth-gated (mitigated by unguessable random filenames, but not a real fix). Flagged during the code-review pass; a real fix needs a signed-URL or authenticated-proxy design decision, not a quick patch.
+5. **Dead `commentText` field** — exists in the schema/API, no UI reads or writes it. Either wire it into the form or drop it from the schema — flagged, not decided.
 
 Everything else from earlier "Not done" lists is now built.
 
@@ -124,7 +125,15 @@ Copy `.env.example` to `.env` first if `.env` doesn't exist (JWT_SECRET etc.).
 
 Or via Claude Code's Browser preview tool: `.claude/launch.json` has a `checker-app-frontend` config (port 5173) — the backend still needs to be started separately.
 
-**To actually deploy** (not done yet): push to GitHub (already done), connect a Render account to the repo, apply `render.yaml` as a Blueprint, and follow the comments in that file (region-matching the web service and Postgres instance, pasting the External Database URL if the internal host is unreachable).
+## Deploying
+
+**Render is explicitly out** — the user decided against it. No hosting platform is chosen yet (as of this checkpoint, the user's partner will pick one and host it), so `room-check-app/render.yaml` was deleted and `scripts/render-build.sh` renamed to `scripts/build.sh` with its Render-specific wording removed. What's left is intentionally generic:
+
+- **Build**: `scripts/build.sh` (run from `room-check-app/`) — installs deps, switches the Prisma schema to `postgresql` for the build, generates the client, builds the frontend.
+- **Start**: `node scripts/start.js` (run from `room-check-app/`) — validates `DATABASE_URL`, `prisma db push` (no `--accept-data-loss`), seeds only if the DB is empty, boots the API. The Express server also serves the built frontend with a SPA fallback, so it's a single deployable process — no separate static host needed.
+- **Requires**: any Node 20+ runtime that can run a persistent process (not serverless — this holds a long-lived Express server) + any PostgreSQL database, reachable via `DATABASE_URL`. Full env var list is in the root [`README.md`](README.md)'s "Production build & deploy" section — that file is written for a human partner unfamiliar with the codebase, keep it in sync with any deploy-relevant changes here.
+- **Health check**: `GET /health` → `{"ok": true}`.
+- **Not yet solved**: upload persistence depends entirely on whichever platform gets picked — `UPLOAD_DIR` is local disk, so a platform without a persistent volume will lose photos on restart/redeploy. Revisit once a platform is chosen.
 
 ---
 
@@ -139,7 +148,8 @@ Or via Claude Code's Browser preview tool: `.claude/launch.json` has a `checker-
 - Retired camps/rooms (`active=false`) must stay excluded from inspector/supervisor-facing endpoints
 - Priority flags are INSPECTOR-only to write, camp-wide, no history on removal — don't add per-room granularity or an edit history without a spec change
 - The printable report is one shared component reused by both roles — don't fork it into two copies like the original design's per-section export did
-- Don't deploy to Render without the user's explicit go-ahead — the config is prepared, not applied
+- Render is explicitly ruled out as a host — don't reintroduce Render-specific config (render.yaml, Blueprint references) without the user asking again
+- Don't deploy anywhere, on any platform, without the user's explicit go-ahead — the build/start scripts are prepared, not applied
 - DRAFT inspections are owned by the inspector who created them — every view/mutation route must check `inspectorId === req.user.id` (ADMIN keeps its full-view bypass); don't let `POST /inspections` hand over another inspector's open draft
 - A submitted inspection must have a response on every active checklist item — don't relax the `isItemAnswered` completeness check without an explicit product decision
 - `scripts/start.js` only seeds an empty database — don't make it reseed unconditionally again, that silently reverts admin edits to the checklist template on every redeploy

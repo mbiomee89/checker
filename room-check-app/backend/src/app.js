@@ -64,8 +64,9 @@ export function createApp() {
   mountApiRoutes(app, '/api');
 
   // In production the built frontend ships alongside the API in the same
-  // service (see render.yaml) — serve it and fall back to index.html for
-  // client-side routes so a browser refresh on e.g. /rooms doesn't 404.
+  // service (see scripts/build.sh + scripts/start.js) — serve it and fall
+  // back to index.html for client-side routes so a browser refresh on e.g.
+  // /rooms doesn't 404.
   const hasFrontend = fs.existsSync(path.join(FRONTEND_DIST, 'index.html'));
   if (hasFrontend) {
     app.use(
