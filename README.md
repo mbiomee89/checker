@@ -49,9 +49,10 @@ needs:
    - `JWT_EXPIRES_IN` — e.g. `8h`
    - `NODE_ENV=production`
    - `UPLOAD_DIR` — e.g. `./backend/uploads` (see the storage note below)
-   - `ADMIN_EMAIL` — optional, the email for the first admin account created on first
-     boot (defaults to `admin@checker.local` if unset — just an identifier, see below for
-     why the password isn't something you set here)
+   - `ADMIN_EMAIL` — optional, the email for the first admin account (defaults to
+     `admin@checker.local` if unset)
+   - `ADMIN_PASSWORD` — **strongly recommended**, see below. Pick your own admin
+     password up front instead of relying on a one-time log line.
    - `CORS_ORIGIN` — optional, comma-separated allowlist; only needed if the frontend is
      served from a different origin than the API (this app serves both from the same
      process by default, so usually leave unset)
@@ -62,15 +63,28 @@ needs:
    `DATABASE_URL`, applies the schema with `prisma db push` (deliberately not
    `--accept-data-loss`, so it refuses to silently drop data on a schema conflict), then
    **only if the database is completely empty**: creates the 13-item checklist template
-   and a single admin account with a randomly generated password, printed once to the
-   boot logs, forced to be changed the moment that account logs in. Then boots the API.
-   The Express server also serves the built frontend and falls back to `index.html` for
-   client-side routes, so one process is all that's needed — no separate static host.
-   **Grab that first-boot password from the platform's deploy/boot logs right away** —
-   it's shown exactly once and never stored anywhere in plaintext. (Local dev uses a
-   different seeder, `prisma/seed.js`, with full demo data and a fixed password — that
-   one is never used in production, on purpose, since its password is public in this
-   repo's own docs.)
+   and a single admin account. Then boots the API. The Express server also serves the
+   built frontend and falls back to `index.html` for client-side routes, so one process
+   is all that's needed — no separate static host.
+
+   **Getting into that first admin account** — three ways, in order of how much you
+   should trust them:
+   1. **Set `ADMIN_PASSWORD` before the first boot** (recommended). You choose the
+      password, it's stored wherever you already keep `JWT_SECRET`/`DATABASE_URL`, and
+      you're never racing a log line. Log in with it directly — no forced change.
+   2. **Don't set it** — a password gets randomly generated and printed to the boot logs
+      **exactly once**, with a forced password change on first login. Fine for a quick
+      spin-up; risky for anything you actually care about, since logs rotate and this
+      repo has no way to show that password again.
+   3. **Missed it? Run the recovery script.** `node prisma/reset-admin-password.js` (via
+      your platform's shell/exec feature — Render Shell, `railway run`, `fly ssh
+      console`, a VPS's own shell, etc.) regenerates the admin's credentials **without
+      touching any other data**. Same `ADMIN_PASSWORD`/`ADMIN_EMAIL` env vars apply; if
+      the account somehow doesn't exist, it creates one instead of erroring.
+
+   (Local dev uses a different seeder, `prisma/seed.js`, with full demo data and a fixed
+   password — that one is never used in production, on purpose, since its password is
+   public in this repo's own docs.)
 6. **Health check**: `GET /health` returns `{"ok": true}` — wire this up if the host
    supports a health-check path.
 
