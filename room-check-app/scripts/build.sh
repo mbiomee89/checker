@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build for Render (no DB access during build — see scripts/start.js).
-# Invoked by render.yaml buildCommand — keep these in sync.
+# Production build for any Node + Postgres host (no DB access during build — see
+# scripts/start.js, which runs at boot). Run this from room-check-app/ as the
+# platform's build command, then use `node scripts/start.js` as the start command.
 set -euo pipefail
 
 echo "==> Switching Prisma provider to PostgreSQL for this build"
@@ -15,4 +16,4 @@ npx prisma generate --schema=prisma/schema.prisma
 echo "==> Building frontend"
 npm run build -w frontend
 
-echo "==> Render build complete"
+echo "==> Build complete"
