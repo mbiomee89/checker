@@ -10,21 +10,33 @@
 //      can be run anytime (via the platform's shell/exec) to regenerate
 //      credentials without touching any other data.
 import bcrypt from 'bcryptjs';
-import { generateTempPassword } from '../backend/src/services/users.js';
+import { generateTempPassword, SALT_ROUNDS, MIN_PASSWORD_LENGTH } from '../backend/src/services/users.js';
 
-const SALT_ROUNDS = 10;
-const MIN_ADMIN_PASSWORD_LENGTH = 8;
-
-function resolveCredentials() {
+// Validated up front, before any DB write — a bad ADMIN_PASSWORD/ADMIN_EMAIL must fail
+// this boot cleanly rather than commit the checklist template and let a later retry see
+// "data already present" and silently skip admin creation forever (seed-prod.js calls
+// this before seedChecklistItems for exactly that reason).
+export function assertAdminCredentialsValid() {
   const email = process.env.ADMIN_EMAIL || 'admin@checker.local';
   const explicitPassword = process.env.ADMIN_PASSWORD;
 
-  if (explicitPassword && explicitPassword.length < MIN_ADMIN_PASSWORD_LENGTH) {
+  if (/\s/.test(email)) {
     throw new Error(
-      `ADMIN_PASSWORD is set but too short (${explicitPassword.length} chars, need at least ${MIN_ADMIN_PASSWORD_LENGTH}). Refusing to boot with a weak admin password.`
+      `ADMIN_EMAIL must not contain whitespace (got: ${JSON.stringify(email)}) — a space breaks the ` +
+        `soft-delete email-mangling scheme (backend/src/services/softDelete.js), which uses a space to append the row id.`
     );
   }
+  if (explicitPassword && explicitPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(
+      `ADMIN_PASSWORD is set but too short (${explicitPassword.length} chars, need at least ${MIN_PASSWORD_LENGTH}). Refusing to boot with a weak admin password.`
+    );
+  }
+}
 
+function resolveCredentials() {
+  assertAdminCredentialsValid();
+  const email = process.env.ADMIN_EMAIL || 'admin@checker.local';
+  const explicitPassword = process.env.ADMIN_PASSWORD;
   return { email, password: explicitPassword || generateTempPassword(), isExplicit: Boolean(explicitPassword) };
 }
 
@@ -44,8 +56,17 @@ function logResult(label, email, password, isExplicit) {
   console.log('=================================================================\n');
 }
 
+// Finds the admin by their plain email, or — since a soft-deleted row's email is
+// mangled to "<email> <id>" (softDelete.js) — by that mangled form, so a previously
+// soft-deleted admin is restored in place instead of spawning a duplicate.
+async function findExistingAdmin(prisma, email) {
+  const active = await prisma.user.findFirst({ where: { email, deletedAt: null } });
+  if (active) return active;
+  return prisma.user.findFirst({ where: { email: { startsWith: `${email} ` }, deletedAt: { not: null } } });
+}
+
 // mode: 'create' — always inserts a new user (caller must ensure none exist yet).
-// mode: 'reset' — updates the named admin's credentials if they exist, else creates one.
+// mode: 'reset' — resets the named admin's credentials if they exist, else creates one.
 export async function createOrResetAdmin(prisma, { label, mode }) {
   const { email, password, isExplicit } = resolveCredentials();
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -56,21 +77,30 @@ export async function createOrResetAdmin(prisma, { label, mode }) {
     isActive: true,
   };
 
-  if (mode === 'reset') {
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      await prisma.user.update({ where: { id: existing.id }, data });
-      const roles = await prisma.userRoleAssignment.findMany({ where: { userId: existing.id } });
-      if (!roles.some((r) => r.role === 'ADMIN')) {
-        await prisma.userRoleAssignment.create({ data: { userId: existing.id, role: 'ADMIN' } });
-      }
-      logResult(label, email, password, isExplicit);
-      return;
+  const existing = mode === 'reset' ? await findExistingAdmin(prisma, email) : null;
+
+  if (existing) {
+    // Matching by email alone isn't proof this is the bootstrap admin — only ever
+    // reset a row that already holds ADMIN, so this can't silently take over (and
+    // promote) an unrelated account that happens to share the email.
+    const roles = await prisma.userRoleAssignment.findMany({ where: { userId: existing.id } });
+    if (!roles.some((r) => r.role === 'ADMIN')) {
+      throw new Error(
+        `A user with email ${email} already exists (id ${existing.id}) but does not hold the ADMIN role — ` +
+          `refusing to silently grant it. This looks like an unrelated account, not the bootstrap admin. ` +
+          `Resolve manually via Admin Configuration, or set ADMIN_EMAIL to the correct address.`
+      );
     }
+    if (existing.deletedAt) {
+      data.email = email; // un-mangle back to the plain address on restore
+      data.deletedAt = null;
+    }
+    await prisma.user.update({ where: { id: existing.id }, data });
+  } else {
+    await prisma.user.create({
+      data: { name: 'Admin', email, ...data, roleAssignments: { create: [{ role: 'ADMIN' }] } },
+    });
   }
 
-  await prisma.user.create({
-    data: { name: 'Admin', email, ...data, roleAssignments: { create: [{ role: 'ADMIN' }] } },
-  });
   logResult(label, email, password, isExplicit);
 }

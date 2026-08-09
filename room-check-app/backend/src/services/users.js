@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
 
+export const SALT_ROUNDS = 10;
+export const MIN_PASSWORD_LENGTH = 8;
+
 const WORDS = ['Camp', 'Gulf', 'Room', 'Check', 'Blue', 'Palm', 'Coast', 'Field'];
 const SYMBOLS = ['!', '#', '$', '%'];
 

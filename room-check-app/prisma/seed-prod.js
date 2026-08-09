@@ -8,14 +8,19 @@
 // below — keep them in sync.
 import { PrismaClient } from '@prisma/client';
 import { seedChecklistItems } from './checklistData.js';
-import { createOrResetAdmin } from './adminBootstrap.js';
+import { createOrResetAdmin, assertAdminCredentialsValid } from './adminBootstrap.js';
 
 const prisma = new PrismaClient();
 
 async function main() {
+  // Fail before writing anything — a bad ADMIN_PASSWORD/ADMIN_EMAIL must not commit
+  // the checklist template and then let a later retry see "data already present" and
+  // silently skip admin creation forever.
+  assertAdminCredentialsValid();
+
   await seedChecklistItems(prisma);
 
-  const existingAdminCount = await prisma.user.count();
+  const existingAdminCount = await prisma.user.count({ where: { deletedAt: null } });
   if (existingAdminCount > 0) {
     console.log('[seed-prod] Users already exist — skipping admin bootstrap.');
     return;
