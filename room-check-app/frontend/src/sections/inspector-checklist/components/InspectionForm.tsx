@@ -88,6 +88,7 @@ export function InspectionForm({
   onTextChange,
   onUploadPhoto,
   onRemovePhoto,
+  uploading = false,
 }: InspectionFormProps) {
   const [residentDraft, setResidentDraft] = useState('')
   const readOnly = inspection.readOnly
@@ -365,13 +366,20 @@ export function InspectionForm({
               Photos ({inspection.photos.length}/4)
             </h2>
             {!readOnly && inspection.photos.length < 4 && (
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700">
+              <label
+                className={`inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white dark:bg-blue-600 ${
+                  uploading
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'cursor-pointer hover:bg-slate-800 dark:hover:bg-blue-700'
+                }`}
+              >
                 <Camera className="size-3.5" />
-                Add photo
+                {uploading ? 'Uploading…' : 'Add photo'}
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,.jpg,.jpeg,.png"
                   capture="environment"
+                  disabled={uploading}
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0]
@@ -382,6 +390,11 @@ export function InspectionForm({
               </label>
             )}
           </div>
+          {uploading && (
+            <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+              Uploading photo — wait until it finishes before submitting.
+            </p>
+          )}
           {inspection.photos.length > 0 ? (
             <ul className="flex flex-wrap gap-2">
               {inspection.photos.map((p) => (
@@ -427,20 +440,21 @@ export function InspectionForm({
             </button>
             <button
               type="button"
+              disabled={uploading}
               onClick={() => onSaveDraft?.()}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-200 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
             >
               <Save className="size-4 shrink-0" />
               <span className="truncate">Save draft</span>
             </button>
             <button
               type="button"
-              disabled={missingItems.length > 0}
+              disabled={missingItems.length > 0 || uploading}
               onClick={() => onSubmit?.()}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 disabled:hover:bg-blue-300 dark:disabled:bg-blue-900"
             >
               <Send className="size-4 shrink-0" />
-              Submit
+              {uploading ? 'Wait…' : 'Submit'}
             </button>
           </div>
         )}

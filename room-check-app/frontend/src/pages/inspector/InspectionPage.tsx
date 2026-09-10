@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { InspectionForm } from '../../sections/inspector-checklist/components/InspectionForm';
 import type { ActiveInspection, Camp, ChecklistItem } from '../../sections/inspector-checklist/types';
@@ -13,6 +13,14 @@ import {
 } from '../../api/inspections';
 import { ApiError } from '../../api/client';
 
+function uploadErrorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.status === 408) {
+    return 'Photo upload timed out. Try a smaller photo or better connection.';
+  }
+  if (err instanceof ApiError) return err.message;
+  return 'Could not upload photo.';
+}
+
 export default function InspectionPage() {
   const { id } = useParams<{ id: string }>();
   const inspectionId = Number(id);
@@ -22,7 +30,10 @@ export default function InspectionPage() {
   const [inspection, setInspection] = useState<ActiveInspection | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inspectionRef = useRef<ActiveInspection | null>(null);
+  inspectionRef.current = inspection;
 
   useEffect(() => {
     let cancelled = false;
@@ -87,24 +98,33 @@ export default function InspectionPage() {
 
   return (
     <div>
-      {(saving || error) && (
+      {(saving || uploading || error) && (
         <div className="border-b border-slate-200 bg-white px-4 py-2 text-center text-xs font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-950">
-          {error ? <span className="text-red-600">{error}</span> : 'Saving…'}
+          {error ? (
+            <span className="text-red-600">{error}</span>
+          ) : uploading ? (
+            'Uploading photo…'
+          ) : (
+            'Saving…'
+          )}
         </div>
       )}
       <InspectionForm
       camp={camp}
       checklistItems={checklistItems}
       inspection={inspection}
+      uploading={uploading}
       onBack={() => navigate('/rooms')}
       onCancel={() => navigate('/rooms')}
       onSaveDraft={() => {
         persist(inspection).catch(() => {});
       }}
       onSubmit={async () => {
+        if (uploading) return;
         try {
           const saved = await persist(inspection);
           const { inspection: submitted } = await submitInspection(saved.id);
+          setError(null);
           setInspection(submitted);
         } catch {
           // error already surfaced via `error` state
@@ -146,16 +166,25 @@ export default function InspectionPage() {
         }))
       }
       onUploadPhoto={async (file) => {
+        setUploading(true);
+        setError(null);
         try {
           const { photo } = await uploadInspectionPhoto(inspection.id, file);
+          setError(null);
           update((insp) => ({ ...insp, photos: [...insp.photos, photo] }));
         } catch (err) {
-          setError(err instanceof ApiError ? err.message : 'Could not upload photo.');
+          // Ignore late failures if the inspection was already submitted.
+          if (inspectionRef.current?.status === 'DRAFT') {
+            setError(uploadErrorMessage(err));
+          }
+        } finally {
+          setUploading(false);
         }
       }}
       onRemovePhoto={async (photoId) => {
         try {
           await deleteInspectionPhoto(inspection.id, photoId);
+          setError(null);
           update((insp) => ({ ...insp, photos: insp.photos.filter((p) => p.id !== photoId) }));
         } catch (err) {
           setError(err instanceof ApiError ? err.message : 'Could not remove photo.');

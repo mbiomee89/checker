@@ -164,4 +164,6 @@ export interface InspectionFormProps {
   onTextChange?: (checklistItemId: number, value: string) => void;
   onUploadPhoto?: (file: File) => void;
   onRemovePhoto?: (photoId: number) => void;
+  /** True while a photo upload is in flight — blocks Submit to avoid race with DRAFT→SUBMITTED. */
+  uploading?: boolean;
 }

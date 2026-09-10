@@ -50,6 +50,14 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   let res: Response;
   try {
     res = await fetch(`/api${path}`, { ...rest, headers: finalHeaders, body: finalBody, signal: controller.signal });
+  } catch (err) {
+    const aborted =
+      (err instanceof DOMException && err.name === 'AbortError') ||
+      (err instanceof Error && err.name === 'AbortError');
+    if (aborted) {
+      throw new ApiError(408, 'Request timed out. Try again or use a better connection.');
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }

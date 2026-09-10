@@ -39,9 +39,11 @@ export function submitInspection(id: number) {
 export function uploadInspectionPhoto(id: number, file: File) {
   const form = new FormData();
   form.append('photo', file);
+  // Phone JPEGs over cellular often exceed the default 15s API timeout.
   return apiRequest<{ photo: { id: number; url: string; mimeType: string } }>(`/inspections/${id}/photos`, {
     method: 'POST',
     body: form,
+    timeoutMs: 120_000,
   });
 }
 
