@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test src/services/correctiveActions.test.js"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",

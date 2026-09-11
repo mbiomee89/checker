@@ -14,7 +14,7 @@ import {
   isItemAnswered,
   validateResponsePayload,
 } from '../services/inspections.js';
-import { appendNote } from '../services/correctiveActions.js';
+import { appendNote, alreadyLoggedInspectionObservation } from '../services/correctiveActions.js';
 import path from 'node:path';
 
 const router = Router();
@@ -30,9 +30,9 @@ function assertCanView(user, inspection) {
   if (user.activeRole === 'CAMP_SUPERVISOR' && user.campId !== inspection.campId) throw forbidden();
 }
 
-// DRAFT inspections belong to the inspector who created them — every mutation route
-// (PATCH, submit, photos) must call this. assertCanView covers the read-only GET.
-function assertOwnsDraft(user, inspection) {
+// Inspections belong to the inspector who created them — mutation routes
+// (PATCH, submit, reopen, photos) must call this. assertCanView covers read-only GET.
+function assertOwnsInspection(user, inspection) {
   if (inspection.inspectorId !== user.id) throw forbidden();
 }
 
@@ -157,7 +157,7 @@ router.patch(
   validateBody(patchSchema),
   asyncHandler(async (req, res) => {
     const existing = await loadInspection(req.params.id);
-    assertOwnsDraft(req.user, existing);
+    assertOwnsInspection(req.user, existing);
     if (existing.status !== 'DRAFT') throw conflict('Only DRAFT inspections can be edited');
 
     const { headcount, notes, residentIdNumbers, responses } = req.body;
@@ -219,7 +219,7 @@ router.post(
   validateParams(idParam),
   asyncHandler(async (req, res) => {
     const existing = await loadInspection(req.params.id);
-    assertOwnsDraft(req.user, existing);
+    assertOwnsInspection(req.user, existing);
     if (existing.status !== 'DRAFT') throw conflict('Only DRAFT inspections can be submitted');
 
     const items = await prisma.checklistItem.findMany({
@@ -235,11 +235,16 @@ router.post(
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.inspection.update({ where: { id: existing.id }, data: { status: 'SUBMITTED' } });
+      // Refresh inspectedAt on every submit so reopen → edit → resubmit shows the amendment time.
+      await tx.inspection.update({
+        where: { id: existing.id },
+        data: { status: 'SUBMITTED', inspectedAt: new Date() },
+      });
 
       // requiresAction wiring: any selected TOGGLE option flagged requiresAction opens (or
       // continues) the room's CorrectiveAction for that exact finding — same append-only
-      // convention the Camp Supervisor Dashboard uses for manual notes.
+      // convention the Camp Supervisor Dashboard uses for manual notes. Skip if this
+      // inspection already logged the finding (avoids spam on reopen/resubmit).
       for (const response of existing.responses) {
         for (const so of response.selectedOptions) {
           if (so.option.kind !== 'TOGGLE' || !so.option.requiresAction) continue;
@@ -253,6 +258,11 @@ router.post(
               },
             },
           });
+
+          if (existingAction && alreadyLoggedInspectionObservation(existingAction.description, existing.id)) {
+            continue;
+          }
+
           const note = existingAction
             ? `Still observed on inspection #${existing.id}`
             : `Auto-opened from inspection #${existing.id} — "${so.option.label}" observed`;
@@ -281,6 +291,32 @@ router.post(
 );
 
 router.post(
+  '/:id/reopen',
+  requireRole('INSPECTOR'),
+  validateParams(idParam),
+  asyncHandler(async (req, res) => {
+    const existing = await loadInspection(req.params.id);
+    assertOwnsInspection(req.user, existing);
+    if (existing.status !== 'SUBMITTED') {
+      throw conflict('Only SUBMITTED inspections can be reopened for editing');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const otherDraft = await tx.inspection.findFirst({
+        where: { roomId: existing.roomId, status: 'DRAFT', id: { not: existing.id } },
+      });
+      if (otherDraft) {
+        throw conflict('This room already has an inspection in progress');
+      }
+      await tx.inspection.update({ where: { id: existing.id }, data: { status: 'DRAFT' } });
+    });
+
+    const updated = await loadInspection(req.params.id);
+    res.json({ inspection: serializeInspection(updated) });
+  })
+);
+
+router.post(
   '/:id/photos',
   requireRole('INSPECTOR'),
   validateParams(idParam),
@@ -289,7 +325,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const existing = await loadInspection(req.params.id);
     try {
-      assertOwnsDraft(req.user, existing);
+      assertOwnsInspection(req.user, existing);
     } catch (err) {
       deleteUploadFile(req.file.path);
       throw err;
@@ -321,7 +357,7 @@ router.delete(
   validateParams(idParam.extend({ photoId: z.coerce.number().int().positive() })),
   asyncHandler(async (req, res) => {
     const existing = await loadInspection(req.params.id);
-    assertOwnsDraft(req.user, existing);
+    assertOwnsInspection(req.user, existing);
     if (existing.status !== 'DRAFT') throw conflict('Only DRAFT inspections can be edited');
 
     const photo = existing.photos.find((p) => p.id === req.params.photoId);

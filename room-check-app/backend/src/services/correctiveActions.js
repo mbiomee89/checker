@@ -8,6 +8,12 @@ export function appendNote(existingDescription, user, note) {
   return existingDescription ? `${existingDescription}\n${entry}` : entry;
 }
 
+/** True when this inspection has already written an auto-note for the finding — skip on resubmit. */
+export function alreadyLoggedInspectionObservation(description, inspectionId) {
+  if (!description) return false;
+  return description.includes(`inspection #${inspectionId}`);
+}
+
 export function serializeCorrectiveAction(action) {
   return {
     id: action.id,

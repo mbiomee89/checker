@@ -70,6 +70,7 @@ export interface ActiveInspection {
   headcount: number | null;
   notes: string | null;
   inspectedAt: string;
+  inspectorId: number;
   readOnly: boolean;
   residents: InspectionResident[];
   responses: InspectionResponse[];
@@ -166,4 +167,8 @@ export interface InspectionFormProps {
   onRemovePhoto?: (photoId: number) => void;
   /** True while a photo upload is in flight — blocks Submit to avoid race with DRAFT→SUBMITTED. */
   uploading?: boolean;
+  /** True while save/reopen is in flight — disables Edit to prevent double-submit. */
+  saving?: boolean;
+  /** Reopen a SUBMITTED inspection owned by the current inspector back to DRAFT. */
+  onEdit?: () => void;
 }

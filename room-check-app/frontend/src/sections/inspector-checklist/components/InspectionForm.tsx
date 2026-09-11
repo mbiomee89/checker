@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Camera,
   Check,
+  Pencil,
   Save,
   Send,
   Trash2,
@@ -89,9 +90,12 @@ export function InspectionForm({
   onUploadPhoto,
   onRemovePhoto,
   uploading = false,
+  saving = false,
+  onEdit,
 }: InspectionFormProps) {
   const [residentDraft, setResidentDraft] = useState('')
   const readOnly = inspection.readOnly
+  const editBusy = saving || uploading
   const overcrowded =
     inspection.headcount != null &&
     inspection.approvedCapacity != null &&
@@ -140,6 +144,17 @@ export function InspectionForm({
                 Approved capacity {inspection.approvedCapacity ?? '—'}
               </p>
             </div>
+            {readOnly && onEdit && (
+              <button
+                type="button"
+                disabled={editBusy}
+                onClick={() => onEdit()}
+                className="mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 disabled:hover:bg-blue-300 dark:disabled:bg-blue-900"
+              >
+                <Pencil className="size-4" />
+                Edit
+              </button>
+            )}
           </div>
         </div>
       </div>

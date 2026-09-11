@@ -7,11 +7,13 @@ import {
   getInspection,
   patchInspection,
   submitInspection,
+  reopenInspection,
   uploadInspectionPhoto,
   deleteInspectionPhoto,
   type PatchInspectionBody,
 } from '../../api/inspections';
 import { ApiError } from '../../api/client';
+import { useAuth } from '../../lib/auth';
 
 function uploadErrorMessage(err: unknown): string {
   if (err instanceof ApiError && err.status === 408) {
@@ -25,6 +27,7 @@ export default function InspectionPage() {
   const { id } = useParams<{ id: string }>();
   const inspectionId = Number(id);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [inspection, setInspection] = useState<ActiveInspection | null>(null);
@@ -32,6 +35,7 @@ export default function InspectionPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const inspectionRef = useRef<ActiveInspection | null>(null);
   inspectionRef.current = inspection;
 
@@ -70,6 +74,7 @@ export default function InspectionPage() {
   async function persist(insp: ActiveInspection) {
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
       const { inspection: saved } = await patchInspection(insp.id, buildPatchBody(insp));
       setInspection(saved);
@@ -91,6 +96,10 @@ export default function InspectionPage() {
   if (!inspection) return null;
 
   const camp: Camp = { id: inspection.campId, name: inspection.campName, location: null };
+  const canEditSubmitted =
+    inspection.status === 'SUBMITTED' &&
+    user?.activeRole === 'INSPECTOR' &&
+    user.id === inspection.inspectorId;
 
   function update(mutate: (insp: ActiveInspection) => ActiveInspection) {
     setInspection((prev) => (prev ? mutate(prev) : prev));
@@ -98,10 +107,12 @@ export default function InspectionPage() {
 
   return (
     <div>
-      {(saving || uploading || error) && (
+      {(saving || uploading || error || success) && (
         <div className="border-b border-slate-200 bg-white px-4 py-2 text-center text-xs font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-950">
           {error ? (
             <span className="text-red-600">{error}</span>
+          ) : success ? (
+            <span className="text-emerald-700 dark:text-emerald-400">{success}</span>
           ) : uploading ? (
             'Uploading photo…'
           ) : (
@@ -114,10 +125,31 @@ export default function InspectionPage() {
       checklistItems={checklistItems}
       inspection={inspection}
       uploading={uploading}
+      saving={saving}
       onBack={() => navigate('/rooms')}
       onCancel={() => navigate('/rooms')}
+      onEdit={
+        canEditSubmitted
+          ? async () => {
+              setError(null);
+              setSuccess(null);
+              setSaving(true);
+              try {
+                const { inspection: reopened } = await reopenInspection(inspection.id);
+                setInspection(reopened);
+                setSuccess('Reopened for editing.');
+              } catch (err) {
+                setError(err instanceof ApiError ? err.message : 'Could not reopen this inspection.');
+              } finally {
+                setSaving(false);
+              }
+            }
+          : undefined
+      }
       onSaveDraft={() => {
-        persist(inspection).catch(() => {});
+        persist(inspection)
+          .then(() => setSuccess('Save completed.'))
+          .catch(() => {});
       }}
       onSubmit={async () => {
         if (uploading) return;
@@ -126,6 +158,7 @@ export default function InspectionPage() {
           const { inspection: submitted } = await submitInspection(saved.id);
           setError(null);
           setInspection(submitted);
+          setSuccess('Save completed.');
         } catch {
           // error already surfaced via `error` state
         }
@@ -168,6 +201,7 @@ export default function InspectionPage() {
       onUploadPhoto={async (file) => {
         setUploading(true);
         setError(null);
+        setSuccess(null);
         try {
           const { photo } = await uploadInspectionPhoto(inspection.id, file);
           setError(null);
@@ -185,6 +219,7 @@ export default function InspectionPage() {
         try {
           await deleteInspectionPhoto(inspection.id, photoId);
           setError(null);
+          setSuccess(null);
           update((insp) => ({ ...insp, photos: insp.photos.filter((p) => p.id !== photoId) }));
         } catch (err) {
           setError(err instanceof ApiError ? err.message : 'Could not remove photo.');

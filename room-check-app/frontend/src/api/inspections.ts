@@ -36,6 +36,10 @@ export function submitInspection(id: number) {
   return apiRequest<{ inspection: ActiveInspection }>(`/inspections/${id}/submit`, { method: 'POST' });
 }
 
+export function reopenInspection(id: number) {
+  return apiRequest<{ inspection: ActiveInspection }>(`/inspections/${id}/reopen`, { method: 'POST' });
+}
+
 export function uploadInspectionPhoto(id: number, file: File) {
   const form = new FormData();
   form.append('photo', file);
