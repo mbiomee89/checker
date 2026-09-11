@@ -21,7 +21,7 @@
     "backend:dev": "npm run dev -w checker-backend",
     "frontend": "npm run dev -w frontend",
     "frontend:build": "npm run build -w frontend",
-    "test": "npm run test -w checker-backend"
+    "test": "npm run test -w checker-backend && npm run test -w frontend"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",

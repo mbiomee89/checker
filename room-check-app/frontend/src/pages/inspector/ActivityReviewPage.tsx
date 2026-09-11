@@ -8,6 +8,7 @@ import { listChecklistItems } from '../../api/checklistItems';
 import { listLatestByRoom } from '../../api/roomInspections';
 import { listCorrectiveActions } from '../../api/correctiveActions';
 import { listPriorityFlags, addPriorityFlag, removePriorityFlag } from '../../api/priorityFlags';
+import { rememberInspectorCampId, resolveInspectorCampId, roomsPathForCamp } from '../../shared/inspectorCamp';
 import { useAuth } from '../../lib/auth';
 
 export default function ActivityReviewPage() {
@@ -40,10 +41,11 @@ export default function ActivityReviewPage() {
         if (cancelled) return;
         setCamps(camps);
         setChecklistItems(items);
-        const firstCamp = camps[0];
-        if (firstCamp) {
-          setCampId(firstCamp.id);
-          await loadCampData(firstCamp.id);
+        const resolved = resolveInspectorCampId(camps, null);
+        if (resolved != null) {
+          setCampId(resolved);
+          rememberInspectorCampId(resolved);
+          await loadCampData(resolved);
         }
       } catch {
         if (!cancelled) setError('Could not load activity review data.');
@@ -59,6 +61,7 @@ export default function ActivityReviewPage() {
 
   async function handleSelectCamp(id: number) {
     setCampId(id);
+    rememberInspectorCampId(id);
     setLoading(true);
     try {
       await loadCampData(id);
@@ -84,7 +87,10 @@ export default function ActivityReviewPage() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-700 dark:bg-slate-950">
         <Link
-          to="/rooms"
+          to={campId != null ? roomsPathForCamp(campId) : '/rooms'}
+          onClick={() => {
+            if (campId != null) rememberInspectorCampId(campId);
+          }}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
         >
           <ArrowLeft className="size-3.5" />

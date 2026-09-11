@@ -41,6 +41,8 @@ export function RoomTable({
   camps,
   currentUser,
   roomRows,
+  selectedCampId,
+  onSelectedCampChange,
   searchQuery,
   onSearchChange,
   onStartInspection,
@@ -49,7 +51,6 @@ export function RoomTable({
   onPreviewReport,
 }: RoomTableProps) {
   const [localQuery, setLocalQuery] = useState('')
-  const [selectedCampId, setSelectedCampId] = useState<number | ''>(camps[0]?.id ?? '')
   const query = (searchQuery ?? localQuery).trim().toLowerCase()
 
   const camp = camps.find((c) => c.id === selectedCampId) ?? camps[0]
@@ -78,7 +79,7 @@ export function RoomTable({
               <span className="sr-only">Camp</span>
               <select
                 value={selectedCampId}
-                onChange={(e) => setSelectedCampId(Number(e.target.value))}
+                onChange={(e) => onSelectedCampChange(Number(e.target.value))}
                 className="-ms-1 rounded-md border-0 bg-transparent px-1 text-2xl font-semibold tracking-tight text-white md:text-3xl [&>option]:text-slate-900"
               >
                 {camps.map((c) => (

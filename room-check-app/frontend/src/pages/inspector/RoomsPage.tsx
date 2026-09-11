@@ -1,19 +1,23 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RoomTable } from '../../sections/inspector-checklist/components/RoomTable';
 import type { Camp, RoomRow } from '../../sections/inspector-checklist/types';
 import { listCamps } from '../../api/camps';
 import { listRooms } from '../../api/rooms';
 import { createInspection } from '../../api/inspections';
 import { useAuth } from '../../lib/auth';
+import { rememberInspectorCampId, resolveInspectorCampId } from '../../shared/inspectorCamp';
 
 export default function RoomsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlCampId = searchParams.get('campId');
   const [camps, setCamps] = useState<Camp[]>([]);
   const [roomRows, setRoomRows] = useState<RoomRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCampId, setSelectedCampId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,8 +41,38 @@ export default function RoomsPage() {
     };
   }, []);
 
+  // Keep selection in sync when URL campId changes without remounting (e.g. sidebar → /rooms).
+  useEffect(() => {
+    if (camps.length === 0) return;
+    const resolved = resolveInspectorCampId(camps, urlCampId);
+    if (resolved == null) {
+      setSelectedCampId(null);
+      return;
+    }
+    setSelectedCampId(resolved);
+    rememberInspectorCampId(resolved);
+    if (urlCampId !== String(resolved)) {
+      setSearchParams({ campId: String(resolved) }, { replace: true });
+    }
+  }, [camps, urlCampId, setSearchParams]);
+
+  const handleSelectedCampChange = useCallback(
+    (campId: number) => {
+      setSelectedCampId(campId);
+      rememberInspectorCampId(campId);
+      setSearchParams({ campId: String(campId) }, { replace: true });
+    },
+    [setSearchParams],
+  );
+
+  function openInspection(inspectionId: number) {
+    if (selectedCampId != null) rememberInspectorCampId(selectedCampId);
+    navigate(`/inspections/${inspectionId}`);
+  }
+
   async function handleStartInspection(roomId: number) {
     const { inspection } = await createInspection(roomId);
+    rememberInspectorCampId(inspection.campId);
     navigate(`/inspections/${inspection.id}`);
   }
 
@@ -49,16 +83,24 @@ export default function RoomsPage() {
     return <div className="p-10 text-red-600">{error}</div>;
   }
   if (!user) return null;
+  if (camps.length === 0 || selectedCampId == null) {
+    return <div className="p-10 text-slate-500">No camps available.</div>;
+  }
 
   return (
     <RoomTable
       camps={camps}
       currentUser={{ id: user.id, name: user.name, role: user.activeRole }}
       roomRows={roomRows}
+      selectedCampId={selectedCampId}
+      onSelectedCampChange={handleSelectedCampChange}
       onStartInspection={handleStartInspection}
-      onResumeDraft={(id) => navigate(`/inspections/${id}`)}
-      onViewSubmitted={(id) => navigate(`/inspections/${id}`)}
-      onPreviewReport={(id) => navigate(`/inspections/${id}/report`)}
+      onResumeDraft={openInspection}
+      onViewSubmitted={openInspection}
+      onPreviewReport={(id) => {
+        if (selectedCampId != null) rememberInspectorCampId(selectedCampId);
+        navigate(`/inspections/${id}/report`);
+      }}
     />
   );
 }

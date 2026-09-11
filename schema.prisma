@@ -204,6 +204,7 @@ model Inspection {
   inspector   User                 @relation("InspectorInspections", fields: [inspectorId], references: [id], onDelete: Restrict)
   inspectorId Int
   status      InspectionStatus     @default(DRAFT) // only SUBMITTED appears on the camp supervisor's dashboard; PATCH allowed while DRAFT
+  reopened    Boolean              @default(false) // true after Edit/reopen until Submit or Discard-restores SUBMITTED; Discard on a new draft sets CANCELLED
   headcount   Int? // quick count, checked against Room.approvedCapacity
   notes       String?
   inspectedAt DateTime             @default(now())

@@ -93,6 +93,7 @@ export function serializeInspection(inspection) {
     campId: inspection.campId,
     campName: inspection.camp.name,
     status: inspection.status,
+    reopened: Boolean(inspection.reopened),
     readOnly: inspection.status !== 'DRAFT',
     headcount: inspection.headcount,
     notes: inspection.notes,

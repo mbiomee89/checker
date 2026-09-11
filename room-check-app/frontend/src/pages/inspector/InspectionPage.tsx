@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Check } from 'lucide-react';
 import { InspectionForm } from '../../sections/inspector-checklist/components/InspectionForm';
 import type { ActiveInspection, Camp, ChecklistItem } from '../../sections/inspector-checklist/types';
 import { listChecklistItems } from '../../api/checklistItems';
@@ -8,12 +9,14 @@ import {
   patchInspection,
   submitInspection,
   reopenInspection,
+  cancelInspection,
   uploadInspectionPhoto,
   deleteInspectionPhoto,
   type PatchInspectionBody,
 } from '../../api/inspections';
 import { ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
+import { rememberInspectorCampId, roomsPathForCamp } from '../../shared/inspectorCamp';
 
 function uploadErrorMessage(err: unknown): string {
   if (err instanceof ApiError && err.status === 408) {
@@ -21,6 +24,37 @@ function uploadErrorMessage(err: unknown): string {
   }
   if (err instanceof ApiError) return err.message;
   return 'Could not upload photo.';
+}
+
+function SuccessPopup({ message, onClose }: { message: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="inspection-success-title"
+    >
+      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl dark:bg-slate-900">
+        <div className="flex flex-col items-center text-center">
+          <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+            <Check className="size-6" strokeWidth={2.5} />
+          </div>
+          <h3 id="inspection-success-title" className="text-base font-semibold text-slate-900 dark:text-white">
+            {message}
+          </h3>
+        </div>
+        <div className="mt-5 flex justify-center">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function InspectionPage() {
@@ -105,29 +139,56 @@ export default function InspectionPage() {
     setInspection((prev) => (prev ? mutate(prev) : prev));
   }
 
+  const goToRooms = () => {
+    rememberInspectorCampId(inspection.campId);
+    navigate(roomsPathForCamp(inspection.campId));
+  };
+
   return (
     <div>
-      {(saving || uploading || error || success) && (
+      {(saving || uploading || error) && (
         <div className="border-b border-slate-200 bg-white px-4 py-2 text-center text-xs font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-950">
-          {error ? (
-            <span className="text-red-600">{error}</span>
-          ) : success ? (
-            <span className="text-emerald-700 dark:text-emerald-400">{success}</span>
-          ) : uploading ? (
-            'Uploading photo…'
-          ) : (
-            'Saving…'
-          )}
+          {error ? <span className="text-red-600">{error}</span> : uploading ? 'Uploading photo…' : 'Saving…'}
         </div>
       )}
+      {success && <SuccessPopup message={success} onClose={() => setSuccess(null)} />}
       <InspectionForm
       camp={camp}
       checklistItems={checklistItems}
       inspection={inspection}
       uploading={uploading}
       saving={saving}
-      onBack={() => navigate('/rooms')}
-      onCancel={() => navigate('/rooms')}
+      onBack={goToRooms}
+      onCancel={async () => {
+        if (inspection.status !== 'DRAFT') {
+          goToRooms();
+          return;
+        }
+        const restoringSubmitted = Boolean(inspection.reopened);
+        const ok = window.confirm(
+          restoringSubmitted
+            ? 'Discard edits and restore the previous submitted inspection? Any answers you already saved on this draft will stay on that record.'
+            : 'Discard this draft inspection? This cannot be undone.',
+        );
+        if (!ok) return;
+        setError(null);
+        setSuccess(null);
+        setSaving(true);
+        try {
+          await cancelInspection(inspection.id);
+          goToRooms();
+        } catch (err) {
+          setError(
+            err instanceof ApiError
+              ? err.message
+              : restoringSubmitted
+                ? 'Could not restore the submitted inspection.'
+                : 'Could not discard this draft.',
+          );
+        } finally {
+          setSaving(false);
+        }
+      }}
       onEdit={
         canEditSubmitted
           ? async () => {

@@ -60,3 +60,30 @@ describe('reopen eligibility rules (documented)', () => {
     );
   });
 });
+
+describe('discard draft outcome (documented)', () => {
+  function discardOutcome({ status, reopened }) {
+    if (status !== 'DRAFT') return { ok: false, reason: 'not-draft' };
+    if (reopened) return { ok: true, nextStatus: 'SUBMITTED', reopened: false };
+    return { ok: true, nextStatus: 'CANCELLED' };
+  }
+
+  it('cancels a brand-new draft', () => {
+    assert.deepEqual(discardOutcome({ status: 'DRAFT', reopened: false }), {
+      ok: true,
+      nextStatus: 'CANCELLED',
+    });
+  });
+
+  it('restores SUBMITTED when discarding a reopened draft', () => {
+    assert.deepEqual(discardOutcome({ status: 'DRAFT', reopened: true }), {
+      ok: true,
+      nextStatus: 'SUBMITTED',
+      reopened: false,
+    });
+  });
+
+  it('rejects non-draft', () => {
+    assert.equal(discardOutcome({ status: 'SUBMITTED', reopened: false }).reason, 'not-draft');
+  });
+});

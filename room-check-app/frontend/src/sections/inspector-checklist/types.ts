@@ -67,6 +67,8 @@ export interface ActiveInspection {
   campId: number;
   campName: string;
   status: InspectionStatus;
+  /** True after Edit/reopen until Submit or Discard restores SUBMITTED. */
+  reopened?: boolean;
   headcount: number | null;
   notes: string | null;
   inspectedAt: string;
@@ -81,6 +83,8 @@ export interface RoomTableProps {
   camps: Camp[];
   currentUser: CurrentUser;
   roomRows: RoomRow[];
+  selectedCampId: number;
+  onSelectedCampChange: (campId: number) => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
   onStartInspection?: (roomId: number) => void;

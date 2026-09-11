@@ -448,10 +448,11 @@ export function InspectionForm({
           <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:justify-end">
             <button
               type="button"
+              disabled={editBusy}
               onClick={() => onCancel?.()}
-              className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
             >
-              Cancel
+              {inspection.reopened ? 'Discard edits' : 'Discard draft'}
             </button>
             <button
               type="button"

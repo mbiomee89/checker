@@ -31,7 +31,7 @@ function assertCanView(user, inspection) {
 }
 
 // Inspections belong to the inspector who created them — mutation routes
-// (PATCH, submit, reopen, photos) must call this. assertCanView covers read-only GET.
+// (PATCH, submit, reopen, cancel, photos) must call this. assertCanView covers read-only GET.
 function assertOwnsInspection(user, inspection) {
   if (inspection.inspectorId !== user.id) throw forbidden();
 }
@@ -238,7 +238,7 @@ router.post(
       // Refresh inspectedAt on every submit so reopen → edit → resubmit shows the amendment time.
       await tx.inspection.update({
         where: { id: existing.id },
-        data: { status: 'SUBMITTED', inspectedAt: new Date() },
+        data: { status: 'SUBMITTED', reopened: false, inspectedAt: new Date() },
       });
 
       // requiresAction wiring: any selected TOGGLE option flagged requiresAction opens (or
@@ -308,9 +308,34 @@ router.post(
       if (otherDraft) {
         throw conflict('This room already has an inspection in progress');
       }
-      await tx.inspection.update({ where: { id: existing.id }, data: { status: 'DRAFT' } });
+      await tx.inspection.update({
+        where: { id: existing.id },
+        data: { status: 'DRAFT', reopened: true },
+      });
     });
 
+    const updated = await loadInspection(req.params.id);
+    res.json({ inspection: serializeInspection(updated) });
+  })
+);
+
+router.post(
+  '/:id/cancel',
+  requireRole('INSPECTOR'),
+  validateParams(idParam),
+  asyncHandler(async (req, res) => {
+    const existing = await loadInspection(req.params.id);
+    assertOwnsInspection(req.user, existing);
+    if (existing.status !== 'DRAFT') {
+      throw conflict('Only DRAFT inspections can be cancelled');
+    }
+
+    // Brand-new draft → CANCELLED. Reopened (Edit) draft → restore SUBMITTED (undo reopen).
+    // Draft edits already saved stay on the row; this does not rewind checklist answers.
+    const data = existing.reopened
+      ? { status: 'SUBMITTED', reopened: false }
+      : { status: 'CANCELLED' };
+    await prisma.inspection.update({ where: { id: existing.id }, data });
     const updated = await loadInspection(req.params.id);
     res.json({ inspection: serializeInspection(updated) });
   })
